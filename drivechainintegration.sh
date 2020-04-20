@@ -9,7 +9,7 @@
 # Warn user, delete old data, clone repositories
 #
 
-VERSION=0
+VERSION=1
 
 # Read arguments
 SKIP_CLONE=0 # Skip cloning the repositories from github

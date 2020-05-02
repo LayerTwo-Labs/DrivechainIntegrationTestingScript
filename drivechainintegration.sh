@@ -111,6 +111,7 @@ function starttestchain {
     --verifybmmreadblock \
     --verifybmmcheckblock \
     --verifywtprimeacceptblock \
+    --minwt=1 \
     --mainchainrpcport=18443 &
 }
 
@@ -795,14 +796,23 @@ do
     ((COUNTER++))
 done
 
-# Check if the deposit made it to the sidechain
-LIST_TRANSACTIONS=`./sidechains/src/testchain-cli listtransactions`
+# Check if the deposit address has any transactions on the sidechain
+LIST_TRANSACTIONS=`./sidechains/src/testchain-cli listtransactions "sidechain"`
 COUNT=`echo $LIST_TRANSACTIONS | grep -c "\"address\": \"$ADDRESS\""`
+if [ "$COUNT" -ge 1 ]; then
+    echo
+    echo "Sidechain deposit address has transactions!"
+else
+    echo
+    echo "ERROR sidechain did not receive deposit!"
+    exit
+fi
+
+# Check for the deposit amount
+COUNT=`echo $LIST_TRANSACTIONS | grep -c "\"amount\": 0.99999000"`
 if [ "$COUNT" -eq 1 ]; then
     echo
-    echo "Sidechain received deposit!"
-    echo "Deposit: "
-    echo "$LIST_TRANSACTIONS"
+    echo "Sidechain received correct deposit amount!"
 else
     echo
     echo "ERROR sidechain did not receive deposit!"

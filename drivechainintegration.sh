@@ -77,6 +77,7 @@ if [ "$WARNING_ANSWER" != "yes" ]; then
 fi
 
 REINDEX=0
+BMMAMOUNT=0.0001
 
 #
 # Functions to help the script
@@ -573,7 +574,7 @@ fi
 # send it to the mainchain node, which will add it to the mempool
 echo
 echo "Going to refresh BMM on the sidechain and send BMM request to mainchain"
-./sidechains/src/testchain-cli refreshbmm
+./sidechains/src/testchain-cli refreshbmm $BMMAMOUNT
 
 # TODO check that mainchain has BMM request in mempool
 
@@ -611,7 +612,7 @@ restartdrivenet
 echo
 echo "Will now refresh BMM on the sidechain again and look for our BMM commit"
 echo "BMM block will be connected to the sidechain if BMM commit was made."
-./sidechains/src/testchain-cli refreshbmm
+./sidechains/src/testchain-cli refreshbmm $BMMAMOUNT
 
 # Check that BMM block was added to the sidechain
 GETINFO=`./sidechains/src/testchain-cli getmininginfo`
@@ -662,7 +663,7 @@ do
     # Refresh BMM on the sidechain
     echo
     echo "Refreshing BMM on the sidechain..."
-    ./sidechains/src/testchain-cli refreshbmm
+    ./sidechains/src/testchain-cli refreshbmm $BMMAMOUNT
 
     CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS + 1 ))
 
@@ -777,7 +778,7 @@ do
     # Refresh BMM on the sidechain
     echo
     echo "Refreshing BMM on the sidechain..."
-    ./sidechains/src/testchain-cli refreshbmm
+    ./sidechains/src/testchain-cli refreshbmm $BMMAMOUNT
 
     CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS + 1 ))
 
@@ -858,7 +859,7 @@ do
     # Refresh BMM on the sidechain
     echo
     echo "Refreshing BMM on the sidechain..."
-    ./sidechains/src/testchain-cli refreshbmm
+    ./sidechains/src/testchain-cli refreshbmm $BMMAMOUNT
 
     CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS + 1 ))
 
@@ -951,7 +952,7 @@ do
     # Refresh BMM on the sidechain
     echo
     echo "Refreshing BMM on the sidechain..."
-    ./sidechains/src/testchain-cli refreshbmm
+    ./sidechains/src/testchain-cli refreshbmm $BMMAMOUNT
 
     CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS + 1 ))
 

@@ -916,7 +916,7 @@ MAINCHAIN_ADDRESS=`./mainchain/src/drivenet-cli --regtest getnewaddress mainchai
 # Call the CreateWT RPC
 echo
 echo "We will now create a wt on the sidechain"
-./sidechains/src/testchain-cli createwt $MAINCHAIN_ADDRESS 0.5
+./sidechains/src/testchain-cli createwt $MAINCHAIN_ADDRESS 0.6 0.1
 sleep 3s
 
 # Mine enough BMM blocks for a WT^ to be created and sent to the mainchain

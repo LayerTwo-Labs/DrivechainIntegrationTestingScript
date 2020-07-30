@@ -130,7 +130,6 @@ function restartdrivenet {
     # TODO use jq instead of python
     echo
     echo "We will now restart DriveNet & verify its state after restarting!"
-    sleep 3s
 
     # Record the state before restart
     HASHSCDB=`./mainchain/src/drivenet-cli --regtest getscdbhash`
@@ -151,7 +150,7 @@ function restartdrivenet {
 
     echo
     echo "Waiting for mainchain to start"
-    sleep 10s
+    sleep 5s
 
     # Verify the state after restart
     HASHSCDBRESTART=`./mainchain/src/drivenet-cli --regtest getscdbhash`
@@ -912,11 +911,12 @@ restartdrivenet
 
 # Get a mainchain address
 MAINCHAIN_ADDRESS=`./mainchain/src/drivenet-cli --regtest getnewaddress mainchain legacy`
+REFUND_ADDRESS=`./sidechains/src/testchain-cli getnewaddress refund legacy`
 
 # Call the CreateWT RPC
 echo
 echo "We will now create a wt on the sidechain"
-./sidechains/src/testchain-cli createwt $MAINCHAIN_ADDRESS 0.5 0.1 0.1
+./sidechains/src/testchain-cli createwt $MAINCHAIN_ADDRESS $REFUND_ADDRESS 0.5 0.1 0.1
 sleep 3s
 
 # Mine enough BMM blocks for a WT^ to be created and sent to the mainchain

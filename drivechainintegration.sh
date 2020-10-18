@@ -18,6 +18,7 @@ SKIP_CHECK=0 # Skip make check on repositories
 SKIP_REPLACE_TIP=0 # Skip tests where we replace the chainActive.Tip()
 SKIP_RESTART=0 # Skip tests where we restart and verify state after restart
 SKIP_SHUTDOWN=0 # Don't shutdown the main & side clients when finished testing
+INCOMPATIBLE_BDB=0 # Compile --with-incompatible-bdb
 for arg in "$@"
 do
     if [ "$arg" == "--help" ]; then
@@ -28,6 +29,7 @@ do
         echo "--skip_replace_tip"
         echo "--skip_restart"
         echo "--skip_shutdown"
+        echo "--with-incompatible-bdb"
         exit
     elif [ "$arg" == "--skip_clone" ]; then
         SKIP_CLONE=1
@@ -41,6 +43,8 @@ do
         SKIP_RESTART=1
     elif [ "$arg" == "--skip_shutdown" ]; then
         SKIP_SHUTDOWN=1
+    elif [ "$arg" == "--with-incompatible-bdb" ]; then
+        INCOMPATIBLE_BDB=1
     fi
 done
 
@@ -274,9 +278,24 @@ cd sidechains
 if [ $SKIP_BUILD -ne 1 ]; then
     git checkout testchain &&
     git pull &&
-    ./autogen.sh &&
-    ./configure &&
+    ./autogen.sh
+    if [ $INCOMPATIBLE_BDB -ne 1 ]; then
+        ./configure
+    else
+        ./configure --with-incompatible-bdb
+    fi
+
+    if [ $? -ne 0 ]; then
+        echo "Configure failed!"
+        exit
+    fi
+
     make -j 9
+
+    if [ $? -ne 0 ]; then
+        echo "Make failed!"
+        exit
+    fi
 fi
 
 if [ $SKIP_CHECK -ne 1 ]; then
@@ -291,9 +310,24 @@ cd ../mainchain
 if [ $SKIP_BUILD -ne 1 ]; then
     git checkout master &&
     git pull &&
-    ./autogen.sh &&
-    ./configure &&
+    ./autogen.sh
+    if [ $INCOMPATIBLE_BDB -ne 1 ]; then
+        ./configure
+    else
+        ./configure --with-incompatible-bdb
+    fi
+
+    if [ $? -ne 0 ]; then
+        echo "Configure failed!"
+        exit
+    fi
+
     make -j 9
+
+    if [ $? -ne 0 ]; then
+        echo "Make failed!"
+        exit
+    fi
 fi
 
 if [ $SKIP_CHECK -ne 1 ]; then

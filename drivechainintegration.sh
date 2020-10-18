@@ -9,6 +9,23 @@
 # Warn user, delete old data, clone repositories
 #
 
+# VERSION 2 TODO:
+# * Make mining a block & BMM mining functions
+#
+# * After the first test, repeat the same tests again but with 2 sidechains
+# active at the same time.
+#
+# * Then do some tests sending deposits and creating withdrawals from both
+# sidechains. Do a test where a deposit is made to the first sidechain,
+# withdrawn, and then sent to the second sidechain and withdrawn again.
+#
+# * Keep track of balances and make sure that no funds are lost to BMM - make
+# sure that 100% of funds from failed BMM txns are recovered
+#
+# * Test a WT^ failing
+#
+# * Test multiple WT^s at once for two sidechains
+#
 VERSION=1
 
 # Read arguments
@@ -279,6 +296,7 @@ if [ $SKIP_BUILD -ne 1 ]; then
     git checkout testchain &&
     git pull &&
     ./autogen.sh
+
     if [ $INCOMPATIBLE_BDB -ne 1 ]; then
         ./configure
     else
@@ -311,6 +329,7 @@ if [ $SKIP_BUILD -ne 1 ]; then
     git checkout master &&
     git pull &&
     ./autogen.sh
+
     if [ $INCOMPATIBLE_BDB -ne 1 ]; then
         ./configure
     else

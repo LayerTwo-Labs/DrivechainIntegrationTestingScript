@@ -127,7 +127,7 @@ function startdrivenet {
 function starttestchain {
     ./sidechains/src/qt/testchain-qt \
     --connect=0 \
-    --mainchainregtest \
+    --regtest \
     --verifybmmacceptheader \
     --verifybmmacceptblock \
     --verifybmmreadblock \

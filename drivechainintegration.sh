@@ -133,8 +133,7 @@ function starttestchain {
     --verifybmmreadblock \
     --verifybmmcheckblock \
     --verifywtprimeacceptblock \
-    --minwt=1 \
-    --mainchainrpcport=18443 &
+    --minwt=1 &
 }
 
 function restartdrivenet {
@@ -600,7 +599,7 @@ echo
 echo "Checking if the sidechain has started"
 
 # Test that sidechain can receive commands and has 0 blocks
-GETINFO=`./sidechains/src/testchain-cli getmininginfo`
+GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
 COUNT=`echo $GETINFO | grep -c "\"blocks\": 0"`
 if [ "$COUNT" -eq 1 ]; then
     echo "Sidechain up and running!"
@@ -626,7 +625,7 @@ fi
 # send it to the mainchain node, which will add it to the mempool
 echo
 echo "Going to refresh BMM on the sidechain and send BMM request to mainchain"
-./sidechains/src/testchain-cli refreshbmm $BMMAMOUNT
+./sidechains/src/testchain-cli --regtest refreshbmm $BMMAMOUNT
 
 # TODO check that mainchain has BMM request in mempool
 
@@ -664,10 +663,10 @@ restartdrivenet
 echo
 echo "Will now refresh BMM on the sidechain again and look for our BMM commit"
 echo "BMM block will be connected to the sidechain if BMM commit was made."
-./sidechains/src/testchain-cli refreshbmm $BMMAMOUNT
+./sidechains/src/testchain-cli --regtest refreshbmm $BMMAMOUNT
 
 # Check that BMM block was added to the sidechain
-GETINFO=`./sidechains/src/testchain-cli getmininginfo`
+GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
 COUNT=`echo $GETINFO | grep -c "\"blocks\": 1"`
 if [ "$COUNT" -eq 1 ]; then
     echo "Sidechain connected BMM block!"
@@ -715,12 +714,12 @@ do
     # Refresh BMM on the sidechain
     echo
     echo "Refreshing BMM on the sidechain..."
-    ./sidechains/src/testchain-cli refreshbmm $BMMAMOUNT
+    ./sidechains/src/testchain-cli --regtest refreshbmm $BMMAMOUNT
 
     CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS + 1 ))
 
     # Check that BMM block was added to the side chain
-    GETINFO=`./sidechains/src/testchain-cli getmininginfo`
+    GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
     COUNT=`echo $GETINFO | grep -c "\"blocks\": $CURRENT_SIDE_BLOCKS"`
     if [ "$COUNT" -eq 1 ]; then
         echo
@@ -762,7 +761,7 @@ echo "We will now deposit to the sidechain"
 sleep 3s
 
 # Create sidechain deposit
-ADDRESS=`./sidechains/src/testchain-cli getnewaddress sidechain legacy`
+ADDRESS=`./sidechains/src/testchain-cli --regtest getnewaddress sidechain legacy`
 ./mainchain/src/drivenet-cli --regtest createsidechaindeposit 0 $ADDRESS 1 0.01
 
 # Verify that there are currently no deposits in the db
@@ -830,12 +829,12 @@ do
     # Refresh BMM on the sidechain
     echo
     echo "Refreshing BMM on the sidechain..."
-    ./sidechains/src/testchain-cli refreshbmm $BMMAMOUNT
+    ./sidechains/src/testchain-cli --regtest refreshbmm $BMMAMOUNT
 
     CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS + 1 ))
 
     # Check that BMM block was added to the side chain
-    GETINFO=`./sidechains/src/testchain-cli getmininginfo`
+    GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
     COUNT=`echo $GETINFO | grep -c "\"blocks\": $CURRENT_SIDE_BLOCKS"`
     if [ "$COUNT" -eq 1 ]; then
         echo
@@ -850,7 +849,7 @@ do
 done
 
 # Check if the deposit address has any transactions on the sidechain
-LIST_TRANSACTIONS=`./sidechains/src/testchain-cli listtransactions "sidechain"`
+LIST_TRANSACTIONS=`./sidechains/src/testchain-cli --regtest listtransactions "sidechain"`
 COUNT=`echo $LIST_TRANSACTIONS | grep -c "\"address\": \"$ADDRESS\""`
 if [ "$COUNT" -ge 1 ]; then
     echo
@@ -911,12 +910,12 @@ do
     # Refresh BMM on the sidechain
     echo
     echo "Refreshing BMM on the sidechain..."
-    ./sidechains/src/testchain-cli refreshbmm $BMMAMOUNT
+    ./sidechains/src/testchain-cli --regtest refreshbmm $BMMAMOUNT
 
     CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS + 1 ))
 
     # Check that BMM block was added to the side chain
-    GETINFO=`./sidechains/src/testchain-cli getmininginfo`
+    GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
     COUNT=`echo $GETINFO | grep -c "\"blocks\": $CURRENT_SIDE_BLOCKS"`
     if [ "$COUNT" -eq 1 ]; then
         echo
@@ -932,7 +931,7 @@ done
 
 
 # Check that the deposit has been added to our sidechain balance
-BALANCE=`./sidechains/src/testchain-cli getbalance`
+BALANCE=`./sidechains/src/testchain-cli --regtest getbalance`
 BC=`echo "$BALANCE>0.9" | bc`
 if [ $BC -eq 1 ]; then
     echo
@@ -964,12 +963,12 @@ restartdrivenet
 
 # Get a mainchain address
 MAINCHAIN_ADDRESS=`./mainchain/src/drivenet-cli --regtest getnewaddress mainchain legacy`
-REFUND_ADDRESS=`./sidechains/src/testchain-cli getnewaddress refund legacy`
+REFUND_ADDRESS=`./sidechains/src/testchain-cli --regtest getnewaddress refund legacy`
 
 # Call the CreateWT RPC
 echo
 echo "We will now create a wt on the sidechain"
-./sidechains/src/testchain-cli createwt $MAINCHAIN_ADDRESS $REFUND_ADDRESS 0.5 0.1 0.1
+./sidechains/src/testchain-cli --regtest createwt $MAINCHAIN_ADDRESS $REFUND_ADDRESS 0.5 0.1 0.1
 sleep 3s
 
 # Mine enough BMM blocks for a WT^ to be created and sent to the mainchain
@@ -1005,12 +1004,12 @@ do
     # Refresh BMM on the sidechain
     echo
     echo "Refreshing BMM on the sidechain..."
-    ./sidechains/src/testchain-cli refreshbmm $BMMAMOUNT
+    ./sidechains/src/testchain-cli --regtest refreshbmm $BMMAMOUNT
 
     CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS + 1 ))
 
     # Check that BMM block was added to the side chain
-    GETINFO=`./sidechains/src/testchain-cli getmininginfo`
+    GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
     COUNT=`echo $GETINFO | grep -c "\"blocks\": $CURRENT_SIDE_BLOCKS"`
     if [ "$COUNT" -eq 1 ]; then
         echo
@@ -1114,6 +1113,6 @@ if [ $SKIP_SHUTDOWN -ne 1 ]; then
     echo
     echo "Will now shut down!"
     ./mainchain/src/drivenet-cli --regtest stop
-    ./sidechains/src/testchain-cli stop
+    ./sidechains/src/testchain-cli --regtest stop
 fi
 

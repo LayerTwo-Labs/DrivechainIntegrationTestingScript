@@ -361,6 +361,9 @@ cd ../
 
 
 
+#
+# The testing starts here
+#
 
 
 
@@ -762,7 +765,8 @@ sleep 3s
 
 # Create sidechain deposit
 ADDRESS=`./sidechains/src/testchain-cli --regtest getnewaddress sidechain legacy`
-./mainchain/src/drivenet-cli --regtest createsidechaindeposit 0 $ADDRESS 1 0.01
+DEPOSITADDRESS=`./sidechains/src/testchain-cli --regtest formatdepositaddress $ADDRESS`
+./mainchain/src/drivenet-cli --regtest createsidechaindeposit 0 $DEPOSITADDRESS 1 0.01
 
 # Verify that there are currently no deposits in the db
 DEPOSITCOUNT=`./mainchain/src/drivenet-cli --regtest countsidechaindeposits 0`

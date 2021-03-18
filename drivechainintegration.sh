@@ -440,7 +440,7 @@ restartdrivenet
 #
 
 # Create a sidechain proposal
-./mainchain/src/drivenet-cli --regtest createsidechainproposal "testchain" "testchain for integration test" "0186ff51f527ffdcf2413d50bdf8fab1feb20e5f82815dad48c73cf462b8b313"
+./mainchain/src/drivenet-cli --regtest createsidechainproposal 0 "testchain" "testchain for integration test" "0186ff51f527ffdcf2413d50bdf8fab1feb20e5f82815dad48c73cf462b8b313"
 
 # Check that proposal was cached (not in chain yet)
 LISTPROPOSALS=`./mainchain/src/drivenet-cli --regtest listsidechainproposals`

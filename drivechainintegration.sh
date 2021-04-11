@@ -113,9 +113,6 @@ function startdrivenet {
         --connect=0 \
         --regtest \
         --defaultwtprimevote=upvote &
-
-        # Also set REINDEX back to 0
-        REINDEX=0
     else
         ./mainchain/src/qt/drivenet-qt \
         --connect=0 \
@@ -307,7 +304,7 @@ if [ $SKIP_BUILD -ne 1 ]; then
         exit
     fi
 
-    make -j 9
+    make -j "$(nproc)"
 
     if [ $? -ne 0 ]; then
         echo "Make failed!"
@@ -340,7 +337,7 @@ if [ $SKIP_BUILD -ne 1 ]; then
         exit
     fi
 
-    make -j 9
+    make -j "$(nproc)"
 
     if [ $? -ne 0 ]; then
         echo "Make failed!"
@@ -468,7 +465,7 @@ if [ "$COUNT" -eq 1 ]; then
     echo "Mainchain has 101 blocks now"
 else
     echo
-    echo "ERROR failed to mine block!"
+    echo "ERROR failed to mine block including sidechain proposal!"
     exit
 fi
 
@@ -476,7 +473,6 @@ fi
 replacetip
 
 # Shutdown DriveNet, restart it, and make sure nothing broke
-# This time we will also reindex
 REINDEX=0
 restartdrivenet
 
@@ -542,7 +538,7 @@ if [ "$COUNT" -eq 1 ]; then
     echo "Mainchain has 356 blocks"
 else
     echo
-    echo "ERROR failed to mine blocks!"
+    echo "ERROR failed to mine blocks to activate the sidechain!"
     exit
 fi
 
@@ -567,6 +563,7 @@ echo "$LISTACTIVESIDECHAINS"
 replacetip
 
 # Shutdown DriveNet, restart it, and make sure nothing broke
+REINDEX=0
 restartdrivenet
 
 
@@ -650,7 +647,7 @@ if [ "$COUNT" -eq 1 ]; then
     echo "Mainchain has 357 blocks"
 else
     echo
-    echo "ERROR failed to mine blocks!"
+    echo "ERROR failed to mine blocks to include first BMM request!"
     exit
 fi
 
@@ -710,7 +707,7 @@ do
         echo "Mainchain has $CURRENT_BLOCKS blocks"
     else
         echo
-        echo "ERROR failed to mine block!"
+        echo "ERROR failed to mine block for bmm!"
         exit
     fi
 
@@ -750,6 +747,7 @@ done
 
 
 # Shutdown DriveNet, restart it, and make sure nothing broke
+REINDEX=0
 restartdrivenet
 
 
@@ -792,6 +790,7 @@ fi
 
 # Replace the chain tip and restart
 replacetip
+REINDEX=0
 restartdrivenet
 
 # Verify that a deposit is still in the db after replacing tip & restarting
@@ -826,7 +825,7 @@ do
         echo "Mainchain has $CURRENT_BLOCKS blocks"
     else
         echo
-        echo "ERROR failed to mine block!"
+        echo "ERROR failed to mine block for bmm!"
         exit
     fi
 
@@ -876,6 +875,7 @@ else
 fi
 
 # Shutdown DriveNet, restart it, and make sure nothing broke
+REINDEX=0
 restartdrivenet
 
 echo
@@ -907,7 +907,7 @@ do
         echo "Mainchain has $CURRENT_BLOCKS blocks"
     else
         echo
-        echo "ERROR failed to mine block!"
+        echo "ERROR failed to mine block to mature deposit!"
         exit
     fi
 
@@ -1001,7 +1001,7 @@ do
         echo "Mainchain has $CURRENT_BLOCKS blocks"
     else
         echo
-        echo "ERROR failed to mine block!"
+        echo "ERROR failed to mine block for WT^ creation!"
         exit
     fi
 
@@ -1095,6 +1095,7 @@ else
 fi
 
 # Shutdown DriveNet, restart it, and make sure nothing broke
+REINDEX=0
 restartdrivenet
 
 # Restart again but with reindex

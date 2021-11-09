@@ -22,9 +22,9 @@
 # * Keep track of balances and make sure that no funds are lost to BMM - make
 # sure that 100% of funds from failed BMM txns are recovered
 #
-# * Test a WT^ failing
+# * Test a sidechain withdrawal failing
 #
-# * Test multiple WT^s at once for two sidechains
+# * Test multiple withdrawals at once for two sidechains
 #
 VERSION=1
 
@@ -112,12 +112,12 @@ function startdrivenet {
         --reindex \
         --connect=0 \
         --regtest \
-        --defaultwtprimevote=upvote &
+        --defaultwithdrawalvote=upvote &
     else
         ./mainchain/src/qt/drivenet-qt \
         --connect=0 \
         --regtest \
-        --defaultwtprimevote=upvote &
+        --defaultwithdrawalvote=upvote &
     fi
 }
 
@@ -129,8 +129,8 @@ function starttestchain {
     --verifybmmacceptblock \
     --verifybmmreadblock \
     --verifybmmcheckblock \
-    --verifywtprimeacceptblock \
-    --minwt=1 &
+    --verifywithdrawalbundleacceptblock \
+    --minwithdrawal=1 &
 }
 
 function restartdrivenet {
@@ -162,12 +162,12 @@ function restartdrivenet {
 
     # Restart
     ./mainchain/src/drivenet-cli --regtest stop
-    sleep 5s # Wait a little bit incase shutdown takes a while
+    sleep 10s # Wait a little bit incase shutdown takes a while
     startdrivenet
 
     echo
     echo "Waiting for mainchain to start"
-    sleep 5s
+    sleep 20s
 
     # Verify the state after restart
     HASHSCDBRESTART=`./mainchain/src/drivenet-cli --regtest getscdbhash`
@@ -969,16 +969,16 @@ restartdrivenet
 MAINCHAIN_ADDRESS=`./mainchain/src/drivenet-cli --regtest getnewaddress mainchain legacy`
 REFUND_ADDRESS=`./sidechains/src/testchain-cli --regtest getnewaddress refund legacy`
 
-# Call the CreateWT RPC
+# Call the CreateWithdrawal RPC
 echo
-echo "We will now create a wt on the sidechain"
-./sidechains/src/testchain-cli --regtest createwt $MAINCHAIN_ADDRESS $REFUND_ADDRESS 0.5 0.1 0.1
+echo "We will now create a withdrawal on the sidechain"
+./sidechains/src/testchain-cli --regtest createwithdrawal $MAINCHAIN_ADDRESS $REFUND_ADDRESS 0.5 0.1 0.1
 sleep 3s
 
-# Mine enough BMM blocks for a WT^ to be created and sent to the mainchain
-# We will mine up to 300 blocks before giving up
+# Mine enough BMM blocks for a withdrawal bundle to be created and sent to the
+# mainchain. We will mine up to 300 blocks before giving up.
 echo
-echo "Now we will mine enough BMM blocks for the sidechain to create a WT^"
+echo "Now we will mine enough BMM blocks for the sidechain to create a bundle"
 COUNTER=1
 while [ $COUNTER -le 300 ]
 do
@@ -1001,7 +1001,7 @@ do
         echo "Mainchain has $CURRENT_BLOCKS blocks"
     else
         echo
-        echo "ERROR failed to mine block for WT^ creation!"
+        echo "ERROR failed to mine block for bundle creation!"
         exit
     fi
 
@@ -1024,38 +1024,38 @@ do
         CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS - 1 ))
     fi
 
-    # Check for WT^
-    WTPRIMECHECK=`./mainchain/src/drivenet-cli --regtest listwtprimestatus 0`
-    if [ "-$WTPRIMECHECK-" != "--" ]; then
-        echo "WT^ has been found!"
+    # Check for bundle
+    BUNDLECHECK=`./mainchain/src/drivenet-cli --regtest listwithdrawalstatus 0`
+    if [ "-$BUNDLECHECK-" != "--" ]; then
+        echo "Bundle has been found!"
         break
     fi
 
     ((COUNTER++))
 done
 
-# Check if WT^ was created
-HASHWTPRIME=`./mainchain/src/drivenet-cli --regtest listwtprimestatus 0`
-HASHWTPRIME=`echo $HASHWTPRIME | python -c 'import json, sys; obj=json.load(sys.stdin); print obj[0]["hashwtprime"]'`
-if [ -z "$HASHWTPRIME" ]; then
-    echo "Error: No WT^ found"
+# Check if bundle was created
+HASHBUNDLE=`./mainchain/src/drivenet-cli --regtest listwithdrawalstatus 0`
+HASHBUNDLE=`echo $HASHBUNDLE | python -c 'import json, sys; obj=json.load(sys.stdin); print obj[0]["hash"]'`
+if [ -z "$HASHBUNDLE" ]; then
+    echo "Error: No withdrawal bundle found"
     exit
 else
-    echo "Good: WT^ found: $HASHWTPRIME"
+    echo "Good: bundle found: $HASHBUNDLE"
 fi
 
-# Check that WT^ has work score
-WORKSCORE=`./mainchain/src/drivenet-cli --regtest getworkscore 0 $HASHWTPRIME`
+# Check that bundle has work score
+WORKSCORE=`./mainchain/src/drivenet-cli --regtest getworkscore 0 $HASHBUNDLE`
 if [ $WORKSCORE -lt 1 ]; then
-    echo "Error: No Workscore for WT^!"
+    echo "Error: No Workscore!"
     exit
 else
-    echo "Good: WT^ workscore: $WORKSCORE"
+    echo "Good: workscore: $WORKSCORE"
 fi
 
 # Check that if we replace the tip the workscore does not change
 replacetip
-NEWWORKSCORE=`./mainchain/src/drivenet-cli --regtest getworkscore 0 $HASHWTPRIME`
+NEWWORKSCORE=`./mainchain/src/drivenet-cli --regtest getworkscore 0 $HASHBUNDLE`
 if [ $NEWWORKSCORE -ne $WORKSCORE ]; then
     echo "Error: Workscore invalid after replacing tip!"
     echo "$NEWWORKSCORE != $WORKSCORE"
@@ -1064,33 +1064,33 @@ else
     echo "Good - Workscore: $NEWWORKSCORE unchanged"
 fi
 
-# Mine blocks until WT^ payout should happen
-BLOCKSREMAINING=`./mainchain/src/drivenet-cli --regtest listwtprimestatus 0`
+# Mine blocks until payout should happen
+BLOCKSREMAINING=`./mainchain/src/drivenet-cli --regtest listwithdrawalstatus 0`
 BLOCKSREMAINING=`echo $BLOCKSREMAINING | python -c 'import json, sys; obj=json.load(sys.stdin); print obj[0]["nblocksleft"]'`
 
 echo
-echo "Blocks remaining in WT^ verification period: $BLOCKSREMAINING"
+echo "Blocks remaining in verification period: $BLOCKSREMAINING"
 sleep 5s
 
 echo "Will now mine $BLOCKSREMAINING blocks"
 ./mainchain/src/drivenet-cli --regtest generate $BLOCKSREMAINING
 
 
-# Check if balance of mainchain address received WT^ payout
-WT_BALANCE=`./mainchain/src/drivenet-cli --regtest getbalance mainchain`
-BC=`echo "$WT_BALANCE>0.4" | bc`
+# Check if balance of mainchain address received payout
+WITHDRAW_BALANCE=`./mainchain/src/drivenet-cli --regtest getbalance mainchain`
+BC=`echo "$WITHDRAW_BALANCE>0.4" | bc`
 if [ $BC -eq 1 ]; then
     echo
     echo
     echo -e "\e[32m==========================\e[0m"
     echo
-    echo -e "\e[1mWT^ payout received!\e[0m"
-    echo "amount: $WT_BALANCE"
+    echo -e "\e[1mpayout received!\e[0m"
+    echo "amount: $WITHDRAW_BALANCE"
     echo
     echo -e "\e[32m==========================\e[0m"
 else
     echo
-    echo -e "\e[31mError: WT^ payout not received!\e[0m"
+    echo -e "\e[31mError: payout not received!\e[0m"
     exit
 fi
 

@@ -28,6 +28,10 @@
 #
 VERSION=1
 
+REINDEX=0
+BMMAMOUNT=0.0001
+MINWORKSCORE=131
+
 # Read arguments
 SKIP_CLONE=0 # Skip cloning the repositories from github
 SKIP_BUILD=0 # Skip pulling and building repositories
@@ -97,9 +101,6 @@ if [ "$WARNING_ANSWER" != "yes" ]; then
     exit
 fi
 
-REINDEX=0
-BMMAMOUNT=0.0001
-
 #
 # Functions to help the script
 #
@@ -162,7 +163,7 @@ function restartdrivenet {
 
     # Restart
     ./mainchain/src/drivenet-cli --regtest stop
-    sleep 10s # Wait a little bit incase shutdown takes a while
+    sleep 20s # Wait a little bit incase shutdown takes a while
     startdrivenet
 
     echo
@@ -1067,13 +1068,15 @@ fi
 # Mine blocks until payout should happen
 BLOCKSREMAINING=`./mainchain/src/drivenet-cli --regtest listwithdrawalstatus 0`
 BLOCKSREMAINING=`echo $BLOCKSREMAINING | python -c 'import json, sys; obj=json.load(sys.stdin); print obj[0]["nblocksleft"]'`
+WORKSCORE=`./mainchain/src/drivenet-cli --regtest getworkscore 0 $HASHBUNDLE`
 
 echo
 echo "Blocks remaining in verification period: $BLOCKSREMAINING"
-sleep 5s
+echo "Workscore: $WORKSCORE / $MINWORKSCORE"
+sleep 10s
 
-echo "Will now mine $BLOCKSREMAINING blocks"
-./mainchain/src/drivenet-cli --regtest generate $BLOCKSREMAINING
+echo "Will now mine $MINWORKSCORE blocks"
+./mainchain/src/drivenet-cli --regtest generate $MINWORKSCORE
 
 
 # Check if balance of mainchain address received payout

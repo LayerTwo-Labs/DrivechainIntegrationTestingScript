@@ -112,13 +112,11 @@ function startdrivechain {
         ./mainchain/src/qt/drivechain-qt \
         --reindex \
         --connect=0 \
-        --regtest \
-        --defaultwithdrawalvote=upvote &
+        --regtest &
     else
         ./mainchain/src/qt/drivechain-qt \
         --connect=0 \
-        --regtest \
-        --defaultwithdrawalvote=upvote &
+        --regtest &
     fi
 }
 
@@ -1063,6 +1061,11 @@ if [ $NEWWORKSCORE -ne $WORKSCORE ]; then
 else
     echo "Good - Workscore: $NEWWORKSCORE unchanged"
 fi
+
+# Set our node to upvote the withdrawal
+echo "Setting vote for withdrawal to upvote!"
+sleep 5s
+./mainchain/src/drivechain-cli --regtest setwithdrawalvote upvote 0 $HASHBUNDLE
 
 # Mine blocks until payout should happen
 BLOCKSREMAINING=`./mainchain/src/drivechain-cli --regtest listwithdrawalstatus 0`

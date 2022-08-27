@@ -148,9 +148,6 @@ function restartdrivechain {
     echo "We will now restart drivechain & verify its state after restarting!"
 
     # Record the state before restart
-    HASHSCDB=`./mainchain/src/drivechain-cli --regtest getscdbhash`
-    HASHSCDB=`echo $HASHSCDB | python -c 'import json, sys; obj=json.load(sys.stdin); print obj["hashscdb"]'`
-
     HASHSCDBTOTAL=`./mainchain/src/drivechain-cli --regtest gettotalscdbhash`
     HASHSCDBTOTAL=`echo $HASHSCDBTOTAL | python -c 'import json, sys; obj=json.load(sys.stdin); print obj["hashscdbtotal"]'`
 
@@ -169,9 +166,6 @@ function restartdrivechain {
     sleep 20s
 
     # Verify the state after restart
-    HASHSCDBRESTART=`./mainchain/src/drivechain-cli --regtest getscdbhash`
-    HASHSCDBRESTART=`echo $HASHSCDBRESTART | python -c 'import json, sys; obj=json.load(sys.stdin); print obj["hashscdb"]'`
-
     HASHSCDBTOTALRESTART=`./mainchain/src/drivechain-cli --regtest gettotalscdbhash`
     HASHSCDBTOTALRESTART=`echo $HASHSCDBTOTALRESTART | python -c 'import json, sys; obj=json.load(sys.stdin); print obj["hashscdbtotal"]'`
 
@@ -191,12 +185,6 @@ function restartdrivechain {
         exit
     fi
 
-    if [ "$HASHSCDB" != "$HASHSCDBRESTART" ]; then
-        echo "Error after restarting drivechain!"
-        echo "HASHSCDB != HASHSCDBRESTART"
-        echo "$HASHSCDB != $HASHSCDBRESTART"
-        exit
-    fi
     if [ "$HASHSCDBTOTAL" != "$HASHSCDBTOTALRESTART" ]; then
         echo "Error after restarting drivechain!"
         echo "HASHSCDBTOTAL != HASHSCDBTOTALRESTART"
@@ -386,7 +374,7 @@ sleep 5s
 echo
 echo "Checking if the  has started"
 
-# Test that  can receive commands and has 0 blocks
+# Test that mainchain can receive commands and has 0 blocks
 GETINFO=`./mainchain/src/drivechain-cli --regtest getmininginfo`
 COUNT=`echo $GETINFO | grep -c "\"blocks\": 0"`
 if [ "$COUNT" -eq 1 ]; then
@@ -806,7 +794,7 @@ while [ $COUNTER -le 200 ]
 do
     # Wait a little bit
     echo
-    echo "Waiting for new BMM request to make it to the ..."
+    echo "Waiting for new BMM request to make it to the mainchain..."
     sleep 0.26s
 
     echo "Mining  block"
@@ -888,7 +876,7 @@ while [ $COUNTER -le 121 ]
 do
     # Wait a little bit
     echo
-    echo "Waiting for new BMM request to make it to the ..."
+    echo "Waiting for new BMM request to make it to the mainchain..."
     sleep 0.26s
 
     echo "Mining  block"
@@ -982,7 +970,7 @@ while [ $COUNTER -le 300 ]
 do
     # Wait a little bit
     echo
-    echo "Waiting for new BMM request to make it to the mainchain ..."
+    echo "Waiting for new BMM request to make it to the mainchain..."
     sleep 0.26s
 
     echo "Mining  block"
@@ -1106,6 +1094,51 @@ restartdrivechain
 # Restart again but with reindex
 REINDEX=1
 restartdrivechain
+
+
+
+
+
+# Now activate sidechain 1 - 255
+
+echo
+echo "Now we will propose activation of sidechain 1 - 255"
+sleep 5s
+
+COUNTER=1
+while [ $COUNTER -le 255 ]
+do
+    ./mainchain/src/drivechain-cli --regtest createsidechainproposal $COUNTER SC:$COUNTER
+    sleep 0.1
+
+    ((COUNTER++))
+done
+
+
+echo
+echo "Now we will mine blocks to activate all of the sidechains"
+sleep 5s
+
+COUNTER=1
+while [ $COUNTER -le 274 ]
+do
+    ./mainchain/src/drivechain-cli --regtest generate 1
+    sleep 0.1
+
+    ((COUNTER++))
+done
+
+ACTIVESC=`./mainchain/src/drivechain-cli --regtest getactivesidechaincount`
+
+if [ $ACTIVESC -ne 256 ]; then
+    echo -e "\e[31mError: Failed to activate more sidechains!\e[0m"
+    exit
+fi
+
+echo -e "\e[32m==============================\e[0m"
+echo -e "\e[32mActivated 255 more sidechains!\e[0m"
+echo -e "\e[32m==============================\e[0m"
+sleep 5s
 
 echo
 echo

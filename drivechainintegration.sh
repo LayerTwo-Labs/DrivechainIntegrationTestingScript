@@ -29,8 +29,9 @@
 VERSION=1
 
 REINDEX=0
-BMMAMOUNT=0.0001
-MINWORKSCORE=131
+BMM_BID=0.0001
+MIN_WORK_SCORE=131
+SIDECHAIN_ACTIVATION_SCORE=20
 
 # Read arguments
 SKIP_CLONE=0 # Skip cloning the repositories from github
@@ -133,13 +134,12 @@ function starttestchain {
 }
 
 function restartdrivechain {
-
     if [ $SKIP_RESTART -eq 1 ]; then
         return 0
     fi
 
     #
-    # Shutdown drivechain, restart it, and make sure nothing broke.
+    # Shutdown drivechain mainchain, restart it, and make sure nothing broke.
     # Exits the script if anything did break.
     #
     # TODO check return value of python json parsing and exit if it failed
@@ -148,8 +148,8 @@ function restartdrivechain {
     echo "We will now restart drivechain & verify its state after restarting!"
 
     # Record the state before restart
-    HASHSCDBTOTAL=`./mainchain/src/drivechain-cli --regtest gettotalscdbhash`
-    HASHSCDBTOTAL=`echo $HASHSCDBTOTAL | python -c 'import json, sys; obj=json.load(sys.stdin); print obj["hashscdbtotal"]'`
+    HASHSCDB=`./mainchain/src/drivechain-cli --regtest gettotalscdbhash`
+    HASHSCDB=`echo $HASHSCDB | python -c 'import json, sys; obj=json.load(sys.stdin); print obj["hashscdbtotal"]'`
 
     # Count doesn't return a json array like the above commands - so no parsing
     COUNT=`./mainchain/src/drivechain-cli --regtest getblockcount`
@@ -166,8 +166,8 @@ function restartdrivechain {
     sleep 20s
 
     # Verify the state after restart
-    HASHSCDBTOTALRESTART=`./mainchain/src/drivechain-cli --regtest gettotalscdbhash`
-    HASHSCDBTOTALRESTART=`echo $HASHSCDBTOTALRESTART | python -c 'import json, sys; obj=json.load(sys.stdin); print obj["hashscdbtotal"]'`
+    HASHSCDBRESTART=`./mainchain/src/drivechain-cli --regtest gettotalscdbhash`
+    HASHSCDBRESTART=`echo $HASHSCDBRESTART | python -c 'import json, sys; obj=json.load(sys.stdin); print obj["hashscdbtotal"]'`
 
     COUNTRESTART=`./mainchain/src/drivechain-cli --regtest getblockcount`
     BESTBLOCKRESTART=`./mainchain/src/drivechain-cli --regtest getbestblockhash`
@@ -185,10 +185,10 @@ function restartdrivechain {
         exit
     fi
 
-    if [ "$HASHSCDBTOTAL" != "$HASHSCDBTOTALRESTART" ]; then
+    if [ "$HASHSCDB" != "$HASHSCDBRESTART" ]; then
         echo "Error after restarting drivechain!"
-        echo "HASHSCDBTOTAL != HASHSCDBTOTALRESTART"
-        echo "$HASHSCDBTOTAL != $HASHSCDBTOTALRESTART"
+        echo "HASHSCDB != HASHSCDBRESTART"
+        echo "$HASHSCDB != $HASHSCDBRESTART"
         exit
     fi
 
@@ -198,7 +198,6 @@ function restartdrivechain {
 }
 
 function replacetip {
-
     if [ $SKIP_REPLACE_TIP -eq 1 ]; then
         return 0
     fi
@@ -232,6 +231,53 @@ function replacetip {
         echo "Tip replaced!"
         echo "Old tip: $OLDTIP"
         echo "New tip: $NEWTIP"
+    fi
+}
+
+function minemainchain {
+    BLOCKS_TO_MINE="$1"
+
+    BLOCKS_MINED=0
+    while [ $BLOCKS_MINED -lt $BLOCKS_TO_MINE ]
+    do
+        OLDCOUNT=`./mainchain/src/drivechain-cli --regtest getblockcount`
+        ./mainchain/src/drivechain-cli --regtest generate 1
+        NEWCOUNT=`./mainchain/src/drivechain-cli --regtest getblockcount`
+
+        if [ "$OLDCOUNT" -eq "$NEWCOUNT" ]; then
+            echo
+            echo "Failed to mine mainchain block!"
+            exit
+        fi
+
+        ((BLOCKS_MINED++))
+    done
+}
+
+function bmm {
+    sleep 1s
+    # TODO loop through args to decide which sidechains to bmm
+
+    # Make new bmm request if required and connect new bmm blocks if found
+    ./sidechains/src/testchain-cli --regtest refreshbmm $BMM_BID
+
+    sleep 1s
+
+    OLDCOUNT=`./sidechains/src/testchain-cli --regtest getblockcount`
+
+    minemainchain 1
+
+    sleep 1s
+
+    # New sidechain block should be connected
+    ./sidechains/src/testchain-cli --regtest refreshbmm $BMM_BID
+
+    NEWCOUNT=`./sidechains/src/testchain-cli --regtest getblockcount`
+
+    if [ "$OLDCOUNT" -eq "$NEWCOUNT" ]; then
+        echo
+        echo "Failed to BMM!"
+        exit
     fi
 }
 
@@ -368,11 +414,11 @@ echo "server=1" >> ~/.drivechain/drivechain.conf
 startdrivechain
 
 echo
-echo "Waiting for  to start"
+echo "Waiting for mainchain to start"
 sleep 5s
 
 echo
-echo "Checking if the  has started"
+echo "Checking if the mainchain has started"
 
 # Test that mainchain can receive commands and has 0 blocks
 GETINFO=`./mainchain/src/drivechain-cli --regtest getmininginfo`
@@ -390,7 +436,8 @@ echo
 echo "Drivechain will now generate first 100 blocks"
 sleep 3s
 
-./mainchain/src/drivechain-cli --regtest generate 100
+# Generate 100 mainchain blocks
+minemainchain 100
 
 # Check that 100 blocks were mined
 GETINFO=`./mainchain/src/drivechain-cli --regtest getmininginfo`
@@ -419,7 +466,7 @@ restartdrivechain
 
 
 #
-# Activate a sidechain
+# Activate sidechain testchain
 #
 
 # Create a sidechain proposal
@@ -440,18 +487,18 @@ fi
 echo
 echo "Will now mine a block so that sidechain proposal is added to the chain"
 
-# Mine one block, proposal should be in chain after that
-./mainchain/src/drivechain-cli --regtest generate 1
+# Mine one mainchain block, proposal should be in chain after that
+minemainchain 1
 
 # Check that we have 101 blocks now
 GETINFO=`./mainchain/src/drivechain-cli --regtest getmininginfo`
 COUNT=`echo $GETINFO | grep -c "\"blocks\": 101"`
 if [ "$COUNT" -eq 1 ]; then
     echo
-    echo " has 101 blocks now"
+    echo "mainchain has 101 blocks now"
 else
     echo
-    echo "ERROR failed to mine block including sidechain proposal!"
+    echo "ERROR failed to mine block including testchain proposal!"
     exit
 fi
 
@@ -514,19 +561,7 @@ echo "Will now mine enough blocks to activate the sidechain"
 sleep 5s
 
 # Mine enough blocks to activate the sidechain
-./mainchain/src/drivechain-cli --regtest generate 255
-
-# Check that 255 blocks were mined
-GETINFO=`./mainchain/src/drivechain-cli --regtest getmininginfo`
-COUNT=`echo $GETINFO | grep -c "\"blocks\": 356"`
-if [ "$COUNT" -eq 1 ]; then
-    echo
-    echo "Mainchain has 356 blocks"
-else
-    echo
-    echo "ERROR failed to mine blocks to activate the sidechain!"
-    exit
-fi
+minemainchain $SIDECHAIN_ACTIVATION_SCORE
 
 # Check that the sidechain has been activated
 LISTACTIVESIDECHAINS=`./mainchain/src/drivechain-cli --regtest listactivesidechains`
@@ -558,7 +593,7 @@ restartdrivechain
 
 
 #
-# Get sidechain configured and running
+# Get sidechain testchain configured and running
 #
 
 # Create configuration file for sidechain testchain
@@ -611,7 +646,7 @@ fi
 # send it to the mainchain node, which will add it to the mempool
 echo
 echo "Going to refresh BMM on the sidechain and send BMM request to mainchain"
-./sidechains/src/testchain-cli --regtest refreshbmm $BMMAMOUNT
+./sidechains/src/testchain-cli --regtest refreshbmm $BMM_BID
 
 # TODO check that mainchain has BMM request in mempool
 
@@ -623,19 +658,9 @@ echo
 echo "Mining block on the mainchain, should include BMM commit"
 
 # Mine a mainchain block, which should include the BMM request we just made
-./mainchain/src/drivechain-cli --regtest generate 1
+minemainchain 1
 
-# Check that the block was mined
-GETINFO=`./mainchain/src/drivechain-cli --regtest getmininginfo`
-COUNT=`echo $GETINFO | grep -c "\"blocks\": 357"`
-if [ "$COUNT" -eq 1 ]; then
-    echo
-    echo "Mainchain has 357 blocks"
-else
-    echo
-    echo "ERROR failed to mine blocks to include first BMM request!"
-    exit
-fi
+sleep 2s
 
 # Shutdown drivechain, restart it, and make sure nothing broke
 REINDEX=1
@@ -649,7 +674,7 @@ restartdrivechain
 echo
 echo "Will now refresh BMM on the sidechain again and look for our BMM commit"
 echo "BMM block will be connected to the sidechain if BMM commit was made."
-./sidechains/src/testchain-cli --regtest refreshbmm $BMMAMOUNT
+./sidechains/src/testchain-cli --regtest refreshbmm $BMM_BID
 
 # Check that BMM block was added to the sidechain
 GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
@@ -661,76 +686,14 @@ else
     exit
 fi
 
-# Mine some more BMM blocks and make sure that they all make it to the sidechain
+# Mine some more BMM blocks
 echo
 echo "Now we will test mining more BMM blocks"
 
-CURRENT_BLOCKS=357
-CURRENT_SIDE_BLOCKS=1
-COUNTER=1
-while [ $COUNTER -le 10 ]
-do
-    # Wait a little bit
-    echo
-    echo "Waiting for new BMM request to make it to the mainchain..."
-    sleep 0.26s
-
-    echo "Mining mainchain block"
-    # Generate mainchain block
-    ./mainchain/src/drivechain-cli --regtest generate 1
-
-    CURRENT_BLOCKS=$(( CURRENT_BLOCKS + 1 ))
-
-
-    # Check that mainchain block was connected
-    GETINFO=`./mainchain/src/drivechain-cli --regtest getmininginfo`
-
-    echo $GETINFO
-    echo $CURRENT_BLOCKS
-    COUNT=`echo $GETINFO | grep -c "\"blocks\": $CURRENT_BLOCKS"`
-    if [ "$COUNT" -eq 1 ]; then
-        echo
-        echo "Mainchain has $CURRENT_BLOCKS blocks"
-    else
-        echo
-        echo "ERROR failed to mine block for bmm!"
-        exit
-    fi
-
-    # Refresh BMM on the sidechain
-    echo
-    echo "Refreshing BMM on the sidechain..."
-    ./sidechains/src/testchain-cli --regtest refreshbmm $BMMAMOUNT
-
-    CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS + 1 ))
-
-    # Check that BMM block was added to the side chain
-    GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
-    COUNT=`echo $GETINFO | grep -c "\"blocks\": $CURRENT_SIDE_BLOCKS"`
-    if [ "$COUNT" -eq 1 ]; then
-        echo
-        echo "Sidechain connected BMM block!"
-    else
-        echo
-        echo "ERROR sidechain did not connect BMM block!"
-        # TODO In the testing environment we shouldn't have any failures at all.
-        # It would however be normal in real use to have some failures...
-        #
-        # For now, if we have a failure during testing which is probably due
-        # to a bug on main or side and not the testing environment which has
-        # perfect conditions, move on and try again just like a real node would.
-        # TODO renable exit here?
-        # Subtract 1 before moving on, since we
-        # failed to actually add it.
-        CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS - 1 ))
-    fi
-
-    ((COUNTER++))
+for ((i = 0; i < 10; i++)); do
+    echo "Mining BMM!"
+    bmm
 done
-
-
-
-
 
 # Shutdown drivechain, restart it, and make sure nothing broke
 REINDEX=0
@@ -789,52 +752,9 @@ else
 fi
 
 # Mine some blocks and BMM the sidechain so it can process the deposit
-COUNTER=1
-while [ $COUNTER -le 200 ]
-do
-    # Wait a little bit
-    echo
-    echo "Waiting for new BMM request to make it to the mainchain..."
-    sleep 0.26s
-
-    echo "Mining  block"
-    # Generate  block
-    ./mainchain/src/drivechain-cli --regtest generate 1
-
-    CURRENT_BLOCKS=$(( CURRENT_BLOCKS + 1 ))
-
-    # Check that  block was connected
-    GETINFO=`./mainchain/src/drivechain-cli --regtest getmininginfo`
-    COUNT=`echo $GETINFO | grep -c "\"blocks\": $CURRENT_BLOCKS"`
-    if [ "$COUNT" -eq 1 ]; then
-        echo
-        echo " has $CURRENT_BLOCKS blocks"
-    else
-        echo
-        echo "ERROR failed to mine block for bmm!"
-        exit
-    fi
-
-    # Refresh BMM on the sidechain
-    echo
-    echo "Refreshing BMM on the sidechain..."
-    ./sidechains/src/testchain-cli --regtest refreshbmm $BMMAMOUNT
-
-    CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS + 1 ))
-
-    # Check that BMM block was added to the side chain
-    GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
-    COUNT=`echo $GETINFO | grep -c "\"blocks\": $CURRENT_SIDE_BLOCKS"`
-    if [ "$COUNT" -eq 1 ]; then
-        echo
-        echo "Sidechain connected BMM block!"
-    else
-        echo
-        echo "ERROR sidechain did not connect BMM block!"
-        CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS - 1 ))
-    fi
-
-    ((COUNTER++))
+for ((i = 0; i < 10; i++)); do
+    echo "Mining BMM!"
+    bmm
 done
 
 # Check if the deposit address has any transactions on the sidechain
@@ -865,60 +785,16 @@ REINDEX=0
 restartdrivechain
 
 echo
-echo "Now we will BMM the sidechain until the deposit has matured!"
+echo "Now we will BMM the sidechain to confirm the deposit!"
 
 # Sleep here so user can read the deposit debug output
 sleep 5s
 
 # Mature the deposit on the sidechain, so that it can be withdrawn
-COUNTER=1
-while [ $COUNTER -le 121 ]
-do
-    # Wait a little bit
-    echo
-    echo "Waiting for new BMM request to make it to the mainchain..."
-    sleep 0.26s
-
-    echo "Mining  block"
-    # Generate  block
-    ./mainchain/src/drivechain-cli --regtest generate 1
-
-    CURRENT_BLOCKS=$(( CURRENT_BLOCKS + 1 ))
-
-    # Check that  block was connected
-    GETINFO=`./mainchain/src/drivechain-cli --regtest getmininginfo`
-    COUNT=`echo $GETINFO | grep -c "\"blocks\": $CURRENT_BLOCKS"`
-    if [ "$COUNT" -eq 1 ]; then
-        echo
-        echo " has $CURRENT_BLOCKS blocks"
-    else
-        echo
-        echo "ERROR failed to mine block to mature deposit!"
-        exit
-    fi
-
-    # Refresh BMM on the sidechain
-    echo
-    echo "Refreshing BMM on the sidechain..."
-    ./sidechains/src/testchain-cli --regtest refreshbmm $BMMAMOUNT
-
-    CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS + 1 ))
-
-    # Check that BMM block was added to the side chain
-    GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
-    COUNT=`echo $GETINFO | grep -c "\"blocks\": $CURRENT_SIDE_BLOCKS"`
-    if [ "$COUNT" -eq 1 ]; then
-        echo
-        echo "Sidechain connected BMM block!"
-    else
-        echo
-        echo "ERROR sidechain did not connect BMM block!"
-        CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS - 1 ))
-    fi
-
-    ((COUNTER++))
+for ((i = 0; i < 6; i++)); do
+    echo "Mining BMM!"
+    bmm
 done
-
 
 # Check that the deposit has been added to our sidechain balance
 BALANCE=`./sidechains/src/testchain-cli --regtest getbalance`
@@ -951,7 +827,7 @@ restartdrivechain
 # Withdraw from the sidechain
 #
 
-# Get a  address
+# Get a mainchain address and testchain refund address
 MAINCHAIN_ADDRESS=`./mainchain/src/drivechain-cli --regtest getnewaddress mainchain legacy`
 REFUND_ADDRESS=`./sidechains/src/testchain-cli --regtest getnewaddress refund legacy`
 
@@ -962,53 +838,11 @@ echo "We will now create a withdrawal on the sidechain"
 sleep 3s
 
 # Mine enough BMM blocks for a withdrawal bundle to be created and sent to the
-# . We will mine up to 300 blocks before giving up.
+# mainchain. We will mine up to 300 blocks before giving up.
 echo
 echo "Now we will mine enough BMM blocks for the sidechain to create a bundle"
-COUNTER=1
-while [ $COUNTER -le 300 ]
-do
-    # Wait a little bit
-    echo
-    echo "Waiting for new BMM request to make it to the mainchain..."
-    sleep 0.26s
-
-    echo "Mining  block"
-    # Generate  block
-    ./mainchain/src/drivechain-cli --regtest generate 1
-
-    CURRENT_BLOCKS=$(( CURRENT_BLOCKS + 1 ))
-
-    # Check that  block was connected
-    GETINFO=`./mainchain/src/drivechain-cli --regtest getmininginfo`
-    COUNT=`echo $GETINFO | grep -c "\"blocks\": $CURRENT_BLOCKS"`
-    if [ "$COUNT" -eq 1 ]; then
-        echo
-        echo " has $CURRENT_BLOCKS blocks"
-    else
-        echo
-        echo "ERROR failed to mine block for bundle creation!"
-        exit
-    fi
-
-    # Refresh BMM on the sidechain
-    echo
-    echo "Refreshing BMM on the sidechain..."
-    ./sidechains/src/testchain-cli --regtest refreshbmm $BMMAMOUNT
-
-    CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS + 1 ))
-
-    # Check that BMM block was added to the side chain
-    GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
-    COUNT=`echo $GETINFO | grep -c "\"blocks\": $CURRENT_SIDE_BLOCKS"`
-    if [ "$COUNT" -eq 1 ]; then
-        echo
-        echo "Sidechain connected BMM block!"
-    else
-        echo
-        echo "ERROR sidechain did not connect BMM block!"
-        CURRENT_SIDE_BLOCKS=$(( CURRENT_SIDE_BLOCKS - 1 ))
-    fi
+for ((i = 0; i < 300; i++)); do
+    bmm
 
     # Check for bundle
     BUNDLECHECK=`./mainchain/src/drivechain-cli --regtest listwithdrawalstatus 0`
@@ -1016,8 +850,6 @@ do
         echo "Bundle has been found!"
         break
     fi
-
-    ((COUNTER++))
 done
 
 # Check if bundle was created
@@ -1062,11 +894,11 @@ WORKSCORE=`./mainchain/src/drivechain-cli --regtest getworkscore 0 $HASHBUNDLE`
 
 echo
 echo "Blocks remaining in verification period: $BLOCKSREMAINING"
-echo "Workscore: $WORKSCORE / $MINWORKSCORE"
+echo "Workscore: $WORKSCORE / $MIN_WORK_SCORE"
 sleep 10s
 
-echo "Will now mine $MINWORKSCORE blocks"
-./mainchain/src/drivechain-cli --regtest generate $MINWORKSCORE
+echo "Will now mine $MIN_WORK_SCORE blocks"
+./mainchain/src/drivechain-cli --regtest generate $MIN_WORK_SCORE
 
 
 # Check if balance of  address received payout
@@ -1095,50 +927,8 @@ restartdrivechain
 REINDEX=1
 restartdrivechain
 
-
-
-
-
-# Now activate sidechain 1 - 255
-
-echo
-echo "Now we will propose activation of sidechain 1 - 255"
-sleep 5s
-
-COUNTER=1
-while [ $COUNTER -le 255 ]
-do
-    ./mainchain/src/drivechain-cli --regtest createsidechainproposal $COUNTER SC:$COUNTER
-    sleep 0.1
-
-    ((COUNTER++))
-done
-
-
-echo
-echo "Now we will mine blocks to activate all of the sidechains"
-sleep 5s
-
-COUNTER=1
-while [ $COUNTER -le 274 ]
-do
-    ./mainchain/src/drivechain-cli --regtest generate 1
-    sleep 0.1
-
-    ((COUNTER++))
-done
-
-ACTIVESC=`./mainchain/src/drivechain-cli --regtest getactivesidechaincount`
-
-if [ $ACTIVESC -ne 256 ]; then
-    echo -e "\e[31mError: Failed to activate more sidechains!\e[0m"
-    exit
-fi
-
-echo -e "\e[32m==============================\e[0m"
-echo -e "\e[32mActivated 255 more sidechains!\e[0m"
-echo -e "\e[32m==============================\e[0m"
-sleep 5s
+# Mine 100 more mainchain blocks
+minemainchain 100
 
 echo
 echo

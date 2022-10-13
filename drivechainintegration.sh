@@ -2,31 +2,10 @@
 
 # Drivechain integration testing
 
-# This script will download and build the mainchain and testchain and run a
-# series of tests
+# This script will download and build the mainchain, testchain, trainchain and
+# thunder sidechains and then run a series of tests.
 
-#
-# Warn user, delete old data, clone repositories
-#
-
-# VERSION 2 TODO:
-# * Make mining a block & BMM mining functions
-#
-# * After the first test, repeat the same tests again but with 2 sidechains
-# active at the same time.
-#
-# * Then do some tests sending deposits and creating withdrawals from both
-# sidechains. Do a test where a deposit is made to the first sidechain,
-# withdrawn, and then sent to the second sidechain and withdrawn again.
-#
-# * Keep track of balances and make sure that no funds are lost to BMM - make
-# sure that 100% of funds from failed BMM txns are recovered
-#
-# * Test a sidechain withdrawal failing
-#
-# * Test multiple withdrawals at once for two sidechains
-#
-VERSION=1
+VERSION=2
 
 REINDEX=0
 BMM_BID=0.0001
@@ -71,7 +50,6 @@ do
 done
 
 clear
-
 echo -e "\e[36m██████╗ ██████╗ ██╗██╗   ██╗███████╗███╗   ██╗███████╗████████╗\e[0m"
 echo -e "\e[36m██╔══██╗██╔══██╗██║██║   ██║██╔════╝████╗  ██║██╔════╝╚══██╔══╝\e[0m"
 echo -e "\e[36m██║  ██║██████╔╝██║██║   ██║█████╗  ██╔██╗ ██║█████╗     ██║\e[0m"
@@ -80,10 +58,10 @@ echo -e "\e[36m██████╔╝██║  ██║██║ ╚██�
 echo -e "\e[36m╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝╚══════╝   ╚═╝\e[0m"
 echo -e "\e[1mAutomated integration testing script (v$VERSION)\e[0m"
 echo
-echo "This script will clone, build, configure & run drivechain and sidechain(s)"
-echo "The functional unit tests will be run for drivechain and sidechain(s)."
+echo "This script will clone, build, configure & run drivechain and sidechains"
+echo "The functional unit tests will be run for drivechain and sidechains."
 echo "If those tests pass, the integration test script will try to go through"
-echo "the process of BMM mining, deposit to and withdraw from the sidechain(s)."
+echo "the process of BMM mining, deposit to and withdraw from the sidechains."
 echo
 echo "We will also restart the software many times to check for issues with"
 echo "shutdown and initialization."
@@ -105,6 +83,7 @@ fi
 #
 # Functions to help the script
 #
+
 function startdrivechain {
     if [ $REINDEX -eq 1 ]; then
         echo
@@ -112,18 +91,17 @@ function startdrivechain {
         echo
         ./mainchain/src/qt/drivechain-qt \
         --reindex \
-        --connect=0 \
         --regtest &
     else
         ./mainchain/src/qt/drivechain-qt \
-        --connect=0 \
         --regtest &
     fi
+
+    sleep 15s
 }
 
 function starttestchain {
-    ./sidechains/src/qt/testchain-qt \
-    --connect=0 \
+    ./testchain/src/qt/testchain-qt \
     --regtest \
     --verifybmmacceptheader \
     --verifybmmacceptblock \
@@ -131,6 +109,34 @@ function starttestchain {
     --verifybmmcheckblock \
     --verifywithdrawalbundleacceptblock \
     --minwithdrawal=1 &
+
+    sleep 15s
+}
+
+function starttrainchain {
+    ./trainchain/src/qt/trainchain-qt \
+    --regtest \
+    --verifybmmacceptheader \
+    --verifybmmacceptblock \
+    --verifybmmreadblock \
+    --verifybmmcheckblock \
+    --verifywithdrawalbundleacceptblock \
+    --minwithdrawal=1 &
+
+    sleep 8s
+}
+
+function startthunder {
+    ./thunder/src/qt/thunder-qt \
+    --regtest \
+    --verifybmmacceptheader \
+    --verifybmmacceptblock \
+    --verifybmmreadblock \
+    --verifybmmcheckblock \
+    --verifywithdrawalbundleacceptblock \
+    --minwithdrawal=1 &
+
+    sleep 8s
 }
 
 function restartdrivechain {
@@ -159,11 +165,8 @@ function restartdrivechain {
     # Restart
     ./mainchain/src/drivechain-cli --regtest stop
     sleep 20s # Wait a little bit incase shutdown takes a while
-    startdrivechain
-
-    echo
     echo "Waiting for drivechain to start"
-    sleep 20s
+    startdrivechain
 
     # Verify the state after restart
     HASHSCDBRESTART=`./mainchain/src/drivechain-cli --regtest gettotalscdbhash`
@@ -235,11 +238,7 @@ function replacetip {
 }
 
 function minemainchain {
-    BLOCKS_TO_MINE="$1"
-
-    BLOCKS_MINED=0
-    while [ $BLOCKS_MINED -lt $BLOCKS_TO_MINE ]
-    do
+    for ((x = 0; x < $1; x++)); do
         OLDCOUNT=`./mainchain/src/drivechain-cli --regtest getblockcount`
         ./mainchain/src/drivechain-cli --regtest generate 1
         NEWCOUNT=`./mainchain/src/drivechain-cli --regtest getblockcount`
@@ -249,80 +248,71 @@ function minemainchain {
             echo "Failed to mine mainchain block!"
             exit
         fi
-
-        ((BLOCKS_MINED++))
     done
 }
 
 function bmm {
-    sleep 1s
-    # TODO loop through args to decide which sidechains to bmm
+    sleep 0.5s
 
+    OLD_TESTCHAIN=0
+    OLD_TRAINCHAIN=0
+    OLD_THUNDER=0
+    NEW_TESTCHAIN=0
+    NEW_TRAINCHAIN=0
+    NEW_THUNDER=0
+
+    # Call refreshbmm RPC on any sidechains we want to BMM
     # Make new bmm request if required and connect new bmm blocks if found
-    ./sidechains/src/testchain-cli --regtest refreshbmm $BMM_BID
+    for arg in "$@"
+    do
+        if [ "$arg" == "testchain" ]; then
+            OLD_TESTCHAIN=`./testchain/src/testchain-cli --regtest getblockcount`
+            ./testchain/src/testchain-cli --regtest refreshbmm $BMM_BID
+        elif [ "$arg" == "trainchain" ]; then
+            OLD_TRAINCHAIN=`./trainchain/src/trainchain-cli --regtest getblockcount`
+            ./trainchain/src/trainchain-cli --regtest refreshbmm $BMM_BID
+        elif [ "$arg" == "thunder" ]; then
+            OLD_THUNDER=`./thunder/src/thunder-cli --regtest getblockcount`
+            ./thunder/src/thunder-cli --regtest refreshbmm $BMM_BID
 
-    sleep 1s
-
-    OLDCOUNT=`./sidechains/src/testchain-cli --regtest getblockcount`
-
-    minemainchain 1
-
-    sleep 1s
-
-    # New sidechain block should be connected
-    ./sidechains/src/testchain-cli --regtest refreshbmm $BMM_BID
-
-    NEWCOUNT=`./sidechains/src/testchain-cli --regtest getblockcount`
-
-    if [ "$OLDCOUNT" -eq "$NEWCOUNT" ]; then
-        echo
-        echo "Failed to BMM!"
-        exit
+        sleep 1s
     fi
+    done
+
+    # Up to 3 tries to BMM a block for every sidechain requested
+    for ((y = 0; y < 3; y++)); do
+        # Mine a mainchain block to include BMM requests
+        sleep 1s
+        minemainchain 1
+        sleep 1s
+
+        # Refresh BMM again for selected sidechains and check if block connected
+        for arg in "$@"
+        do
+            if [ "$arg" == "testchain" ]; then
+                ./testchain/src/testchain-cli --regtest refreshbmm $BMM_BID false
+                NEW_TESTCHAIN=`./testchain/src/testchain-cli --regtest getblockcount`
+            elif [ "$arg" == "trainchain" ]; then
+                ./trainchain/src/trainchain-cli --regtest refreshbmm $BMM_BID false
+                NEW_TRAINCHAIN=`./trainchain/src/trainchain-cli --regtest getblockcount`
+            elif [ "$arg" == "thunder" ]; then
+                ./thunder/src/thunder-cli --regtest refreshbmm $BMM_BID false
+                NEW_THUNDER=`./thunder/src/thunder-cli --regtest getblockcount`
+        fi
+        done
+
+        # Check completion
+        if [ "$OLD_TESTCHAIN" -ne "$NEW_TESTCHAIN" ] && \
+            [ "$OLD_TRAINCHAIN" -ne "$NEW_TRAINCHAIN" ] && \
+            [ "$OLD_THUNDER" -ne "$NEW_THUNDER" ]; then
+            break
+        fi
+
+    done
 }
 
-
-
-
-
-
-
-
-# Remove old data directories
-rm -rf ~/.drivechain
-rm -rf ~/.testchain
-
-
-
-
-
-
-
-
-# These can fail, meaning that the repository is already downloaded
-if [ $SKIP_CLONE -ne 1 ]; then
-    echo
-    echo "Cloning repositories"
-    git clone https://github.com/drivechain-project/mainchain
-    git clone https://github.com/drivechain-project/sidechains
-fi
-
-
-
-
-
-
-
-
-#
-# Build repositories & run their unit tests
-#
-echo
-echo "Building repositories"
-cd sidechains
-if [ $SKIP_BUILD -ne 1 ]; then
-    git checkout testchain &&
-    git pull &&
+function buildchain {
+    git pull
     ./autogen.sh
 
     if [ $INCOMPATIBLE_BDB -ne 1 ]; then
@@ -342,50 +332,15 @@ if [ $SKIP_BUILD -ne 1 ]; then
         echo "Make failed!"
         exit
     fi
-fi
 
-if [ $SKIP_CHECK -ne 1 ]; then
-    make check
-    if [ $? -ne 0 ]; then
-        echo "Make check failed!"
-        exit
+    if [ $SKIP_CHECK -ne 1 ]; then
+        make check
+        if [ $? -ne 0 ]; then
+            echo "Make check failed!"
+            exit
+        fi
     fi
-fi
-
-cd ../mainchain
-if [ $SKIP_BUILD -ne 1 ]; then
-    git checkout master &&
-    git pull &&
-    ./autogen.sh
-
-    if [ $INCOMPATIBLE_BDB -ne 1 ]; then
-        ./configure
-    else
-        ./configure --with-incompatible-bdb
-    fi
-
-    if [ $? -ne 0 ]; then
-        echo "Configure failed!"
-        exit
-    fi
-
-    make -j "$(nproc)"
-
-    if [ $? -ne 0 ]; then
-        echo "Make failed!"
-        exit
-    fi
-fi
-
-if [ $SKIP_CHECK -ne 1 ]; then
-    make check
-    if [ $? -ne 0 ]; then
-        echo "Make check failed!"
-        exit
-    fi
-fi
-
-cd ../
+}
 
 
 
@@ -396,12 +351,71 @@ cd ../
 
 
 
+#
+# Remove old data directories
+#
+rm -rf ~/.drivechain
+rm -rf ~/.testchain
+rm -rf ~/.trainchain
+rm -rf ~/.thunder
+
+
 
 #
-# Get mainchain configured and running. Mine first 100 mainchain blocks.
+# Clone repositories & copy sidechains
+#
+if [ $SKIP_CLONE -ne 1 ]; then
+    echo
+    echo "Cloning repositories"
+    git clone https://github.com/drivechain-project/mainchain
+    git clone https://github.com/drivechain-project/sidechains testchain
+
+    if [ ! -d thunder/ ]; then
+        cp -rf testchain thunder
+    fi
+
+    if [ ! -d trainchain/ ]; then
+        cp -rf testchain trainchain
+    fi
+fi
+
+
+
+
+#
+# Build repositories & run their unit tests
+#
+if [ $SKIP_BUILD -ne 1 ]; then
+    echo
+    echo "Building repositories"
+
+    cd mainchain
+    git checkout master
+    buildchain
+    cd ..
+
+    cd testchain
+    git checkout testchain
+    buildchain
+    cd ..
+
+    cd trainchain
+    git checkout trainchain
+    buildchain
+    cd ..
+
+    cd thunder
+    git checkout thunder
+    buildchain
+    cd ..
+fi
+
+
+
+#
+# Create configuration files
 #
 
-# Create configuration file for mainchain
 echo
 echo "Create drivechain configuration file"
 mkdir ~/.drivechain/
@@ -410,12 +424,42 @@ echo "rpcuser=drivechain" > ~/.drivechain/drivechain.conf
 echo "rpcpassword=integrationtesting" >> ~/.drivechain/drivechain.conf
 echo "server=1" >> ~/.drivechain/drivechain.conf
 
-# Start drivechain-qt
-startdrivechain
+echo
+echo "Creating testchain configuration file"
+mkdir ~/.testchain/
+touch ~/.testchain/testchain.conf
+echo "rpcuser=drivechain" > ~/.testchain/testchain.conf
+echo "rpcpassword=integrationtesting" >> ~/.testchain/testchain.conf
+echo "server=1" >> ~/.testchain/testchain.conf
 
 echo
+echo "Creating trainchain configuration file"
+mkdir ~/.trainchain/
+touch ~/.trainchain/trainchain.conf
+echo "rpcuser=drivechain" > ~/.trainchain/trainchain.conf
+echo "rpcpassword=integrationtesting" >> ~/.trainchain/trainchain.conf
+echo "server=1" >> ~/.trainchain/trainchain.conf
+
+echo
+echo "Creating thunder configuration file"
+mkdir ~/.thunder/
+touch ~/.thunder/thunder.conf
+echo "rpcuser=drivechain" > ~/.thunder/thunder.conf
+echo "rpcpassword=integrationtesting" >> ~/.thunder/thunder.conf
+echo "server=1" >> ~/.thunder/thunder.conf
+
+
+
+
+#
+# Get mainchain running and mine first 100 mainchain blocks
+#
+
+
+# Start drivechain-qt
+echo
 echo "Waiting for mainchain to start"
-sleep 5s
+startdrivechain
 
 echo
 echo "Checking if the mainchain has started"
@@ -461,12 +505,8 @@ restartdrivechain
 
 
 
-
-
-
-
 #
-# Activate sidechain testchain
+# Activate testchain
 #
 
 # Create a sidechain proposal
@@ -590,20 +630,9 @@ restartdrivechain
 
 
 
-
-
 #
-# Get sidechain testchain configured and running
+# Get testchain running
 #
-
-# Create configuration file for sidechain testchain
-echo
-echo "Creating sidechain configuration file"
-mkdir ~/.testchain/
-touch ~/.testchain/testchain.conf
-echo "rpcuser=drivechain" > ~/.testchain/testchain.conf
-echo "rpcpassword=integrationtesting" >> ~/.testchain/testchain.conf
-echo "server=1" >> ~/.testchain/testchain.conf
 
 echo
 echo "The sidechain testchain will now be started"
@@ -613,14 +642,10 @@ sleep 5s
 starttestchain
 
 echo
-echo "Waiting for testchain to start"
-sleep 5s
-
-echo
 echo "Checking if the sidechain has started"
 
 # Test that sidechain can receive commands and has 0 blocks
-GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
+GETINFO=`./testchain/src/testchain-cli --regtest getmininginfo`
 COUNT=`echo $GETINFO | grep -c "\"blocks\": 0"`
 if [ "$COUNT" -eq 1 ]; then
     echo "Sidechain up and running!"
@@ -629,57 +654,21 @@ else
     exit
 fi
 
-# Check if the sidechain can communicate with the mainchain
-
-
-
-
-
 
 
 
 #
-# Start BMM mining the sidechain
+# Test BMM mining testchain
 #
 
-# The first time that we call this it should create the first BMM request and
-# send it to the mainchain node, which will add it to the mempool
 echo
-echo "Going to refresh BMM on the sidechain and send BMM request to mainchain"
-./sidechains/src/testchain-cli --regtest refreshbmm $BMM_BID
+echo "Mining first Testchain BMM block!"
+bmm testchain
 
-# TODO check that mainchain has BMM request in mempool
-
-echo
-echo "Giving mainchain some time to receive BMM request from sidechain..."
-sleep 3s
-
-echo
-echo "Mining block on the mainchain, should include BMM commit"
-
-# Mine a mainchain block, which should include the BMM request we just made
-minemainchain 1
-
-sleep 2s
-
-# Shutdown drivechain, restart it, and make sure nothing broke
-REINDEX=1
-restartdrivechain
-
-# TODO verifiy that bmm request was added to chain and removed from mempool
-
-# Refresh BMM again, this time the block we created the first BMM request for
-# should be added to the side chain, and a new BMM request created for the next
-# block
-echo
-echo "Will now refresh BMM on the sidechain again and look for our BMM commit"
-echo "BMM block will be connected to the sidechain if BMM commit was made."
-./sidechains/src/testchain-cli --regtest refreshbmm $BMM_BID
 
 # Check that BMM block was added to the sidechain
-GETINFO=`./sidechains/src/testchain-cli --regtest getmininginfo`
-COUNT=`echo $GETINFO | grep -c "\"blocks\": 1"`
-if [ "$COUNT" -eq 1 ]; then
+COUNT_TESTCHAIN=`./testchain/src/testchain-cli --regtest getblockcount`
+if [ "$COUNT_TESTCHAIN" -eq 1 ]; then
     echo "Sidechain connected BMM block!"
 else
     echo "ERROR sidechain has no BMM block connected!"
@@ -691,14 +680,14 @@ echo
 echo "Now we will test mining more BMM blocks"
 
 for ((i = 0; i < 10; i++)); do
-    echo "Mining BMM!"
-    bmm
+    echo
+    echo "Mining more BMM blocks!"
+    bmm testchain
 done
 
 # Shutdown drivechain, restart it, and make sure nothing broke
-REINDEX=0
+REINDEX=1
 restartdrivechain
-
 
 
 
@@ -711,8 +700,8 @@ echo "We will now deposit to the sidechain"
 sleep 3s
 
 # Create sidechain deposit
-ADDRESS=`./sidechains/src/testchain-cli --regtest getnewaddress sidechain legacy`
-DEPOSITADDRESS=`./sidechains/src/testchain-cli --regtest formatdepositaddress $ADDRESS`
+ADDRESS=`./testchain/src/testchain-cli --regtest getnewaddress sidechain legacy`
+DEPOSITADDRESS=`./testchain/src/testchain-cli --regtest formatdepositaddress $ADDRESS`
 ./mainchain/src/drivechain-cli --regtest createsidechaindeposit 0 $DEPOSITADDRESS 1 0.01
 
 # Verify that there are currently no deposits in the db
@@ -725,8 +714,7 @@ else
 fi
 
 # Generate a block to add the deposit to the mainchain
-./mainchain/src/drivechain-cli --regtest generate 1
-CURRENT_BLOCKS=$(( CURRENT_BLOCKS + 1 )) # TODO stop using CURRENT_BLOCKS
+minemainchain 1
 
 # Verify that a deposit was added to the db
 DEPOSITCOUNT=`./mainchain/src/drivechain-cli --regtest countsidechaindeposits 0`
@@ -751,14 +739,16 @@ else
     echo "Good: Deposit still in db after replacing tip & restarting"
 fi
 
-# Mine some blocks and BMM the sidechain so it can process the deposit
+# Mine some BMM blocks so the sidechain can process the deposit
 for ((i = 0; i < 10; i++)); do
-    echo "Mining BMM!"
-    bmm
+    echo
+    echo "Mining BMM to process deposit!"
+    sleep 0.5s
+    bmm testchain
 done
 
 # Check if the deposit address has any transactions on the sidechain
-LIST_TRANSACTIONS=`./sidechains/src/testchain-cli --regtest listtransactions "sidechain"`
+LIST_TRANSACTIONS=`./testchain/src/testchain-cli --regtest listtransactions "sidechain"`
 COUNT=`echo $LIST_TRANSACTIONS | grep -c "\"address\": \"$ADDRESS\""`
 if [ "$COUNT" -ge 1 ]; then
     echo
@@ -780,24 +770,8 @@ else
     exit
 fi
 
-# Shutdown drivechain, restart it, and make sure nothing broke
-REINDEX=0
-restartdrivechain
-
-echo
-echo "Now we will BMM the sidechain to confirm the deposit!"
-
-# Sleep here so user can read the deposit debug output
-sleep 5s
-
-# Mature the deposit on the sidechain, so that it can be withdrawn
-for ((i = 0; i < 6; i++)); do
-    echo "Mining BMM!"
-    bmm
-done
-
 # Check that the deposit has been added to our sidechain balance
-BALANCE=`./sidechains/src/testchain-cli --regtest getbalance`
+BALANCE=`./testchain/src/testchain-cli --regtest getbalance`
 BC=`echo "$BALANCE>0.9" | bc`
 if [ $BC -eq 1 ]; then
     echo
@@ -809,15 +783,8 @@ else
     exit
 fi
 
-
-# Test sending the deposit around to other addresses on the sidechain
-# TODO
-
-
-
-
 # Shutdown drivechain, restart it, and make sure nothing broke
-REINDEX=1
+REINDEX=0
 restartdrivechain
 
 
@@ -829,20 +796,20 @@ restartdrivechain
 
 # Get a mainchain address and testchain refund address
 MAINCHAIN_ADDRESS=`./mainchain/src/drivechain-cli --regtest getnewaddress mainchain legacy`
-REFUND_ADDRESS=`./sidechains/src/testchain-cli --regtest getnewaddress refund legacy`
+REFUND_ADDRESS=`./testchain/src/testchain-cli --regtest getnewaddress refund legacy`
 
 # Call the CreateWithdrawal RPC
 echo
 echo "We will now create a withdrawal on the sidechain"
-./sidechains/src/testchain-cli --regtest createwithdrawal $MAINCHAIN_ADDRESS $REFUND_ADDRESS 0.5 0.1 0.1
+./testchain/src/testchain-cli --regtest createwithdrawal $MAINCHAIN_ADDRESS $REFUND_ADDRESS 0.5 0.1 0.1
 sleep 3s
 
 # Mine enough BMM blocks for a withdrawal bundle to be created and sent to the
-# mainchain. We will mine up to 300 blocks before giving up.
+# mainchain. We will mine up to 10 blocks before giving up.
 echo
 echo "Now we will mine enough BMM blocks for the sidechain to create a bundle"
-for ((i = 0; i < 300; i++)); do
-    bmm
+for ((i = 0; i < 10; i++)); do
+    bmm testchain
 
     # Check for bundle
     BUNDLECHECK=`./mainchain/src/drivechain-cli --regtest listwithdrawalstatus 0`
@@ -898,10 +865,10 @@ echo "Workscore: $WORKSCORE / $MIN_WORK_SCORE"
 sleep 10s
 
 echo "Will now mine $MIN_WORK_SCORE blocks"
-./mainchain/src/drivechain-cli --regtest generate $MIN_WORK_SCORE
+minemainchain $MIN_WORK_SCORE
 
 
-# Check if balance of  address received payout
+# Check if payout was received
 WITHDRAW_BALANCE=`./mainchain/src/drivechain-cli --regtest getbalance mainchain`
 BC=`echo "$WITHDRAW_BALANCE>0.4" | bc`
 if [ $BC -eq 1 ]; then
@@ -930,6 +897,246 @@ restartdrivechain
 # Mine 100 more mainchain blocks
 minemainchain 100
 
+
+
+#
+# Propose the trainchain and thunder sidechains
+#
+
+./mainchain/src/drivechain-cli --regtest createsidechainproposal 2 "thunder" "and lightning"
+minemainchain 1
+./mainchain/src/drivechain-cli --regtest createsidechainproposal 3 "trainchain" "all aboard"
+minemainchain 1
+
+# Mine enough blocks to activate the sidechains
+minemainchain $SIDECHAIN_ACTIVATION_SCORE
+
+# Check that the sidechains have been activated
+
+LISTACTIVESIDECHAINS=`./mainchain/src/drivechain-cli --regtest listactivesidechains`
+
+COUNTTHUNDER=`echo $LISTACTIVESIDECHAINS | grep -c "\"title\": \"thunder\""`
+if [ "$COUNTTHUNDER" -eq 1 ]; then
+    echo
+    echo "Thunder has activated!"
+else
+    echo
+    echo "ERROR Thunder failed to activate!"
+    exit
+fi
+
+COUNTTRAINCHAIN=`echo $LISTACTIVESIDECHAINS | grep -c "\"title\": \"trainchain\""`
+if [ "$COUNTTRAINCHAIN" -eq 1 ]; then
+    echo
+    echo "Trainchain has activated!"
+else
+    echo
+    echo "ERROR Trainchain failed to activate!"
+    exit
+fi
+
+echo
+echo "listactivesidechains:"
+echo
+echo "$LISTACTIVESIDECHAINS"
+
+# Shutdown drivechain, restart it, and make sure nothing broke
+REINDEX=0
+restartdrivechain
+
+
+
+
+#
+# Start Trainchain & Thunder and then test BMM mining them
+#
+
+echo
+echo "Starting Trainchain and Thunder sidechains"
+starttrainchain
+startthunder
+
+# BMM mine the three active sidechains
+echo
+echo "Now we will BMM mine all three active sidechains"
+for ((i = 0; i < 10; i++)); do
+    echo
+    echo "BMM mining all three active sidechains!"
+    bmm testchain trainchain thunder
+done
+
+
+
+
+#
+# Create deposits to all three sidechains
+#
+
+TESTCHAIN_ADDRESS=`./testchain/src/testchain-cli --regtest getnewaddress sidechain legacy`
+TESTCHAIN_DEPOSIT_ADDRESS=`./testchain/src/testchain-cli --regtest formatdepositaddress $TESTCHAIN_ADDRESS`
+./mainchain/src/drivechain-cli --regtest createsidechaindeposit 0 $TESTCHAIN_DEPOSIT_ADDRESS 1000 0.01
+
+THUNDER_ADDRESS=`./thunder/src/thunder-cli --regtest getnewaddress sidechain legacy`
+THUNDER_DEPOSIT_ADDRESS=`./thunder/src/thunder-cli --regtest formatdepositaddress $THUNDER_ADDRESS`
+./mainchain/src/drivechain-cli --regtest createsidechaindeposit 2 $THUNDER_DEPOSIT_ADDRESS 1000 0.01
+
+TRAINCHAIN_ADDRESS=`./trainchain/src/trainchain-cli --regtest getnewaddress sidechain legacy`
+TRAINCHAIN_DEPOSIT_ADDRESS=`./trainchain/src/trainchain-cli --regtest formatdepositaddress $TRAINCHAIN_ADDRESS`
+./mainchain/src/drivechain-cli --regtest createsidechaindeposit 3 $TRAINCHAIN_DEPOSIT_ADDRESS 1000 0.01
+
+# Process deposits
+echo
+echo "Now we will BMM mine to process deposits"
+for ((i = 0; i < 6; i++)); do
+    echo
+    echo "BMM mining to process deposits!"
+    bmm testchain trainchain thunder
+done
+
+# Check that the deposits have been added to our sidechain balance
+
+BALANCE_TESTCHAIN=`./testchain/src/testchain-cli --regtest getbalance`
+BC=`echo "$BALANCE_TESTCHAIN>=1000" | bc`
+if [ $BC -eq 1 ]; then
+    echo
+    echo "Sidechain balance updated, deposit processed!"
+    echo "testchain balance: $BALANCE_TESTCHAIN"
+else
+    echo
+    echo "ERROR Testchain deposit did not complete!"
+    exit
+fi
+
+BALANCE_THUNDER=`./thunder/src/thunder-cli --regtest getbalance`
+BC=`echo "$BALANCE_THUNDER>=1000" | bc`
+if [ $BC -eq 1 ]; then
+    echo
+    echo "Sidechain balance updated, deposit processed!"
+    echo "thunder balance: $BALANCE_THUNDER"
+else
+    echo
+    echo "ERROR thunder deposit did not complete!"
+    exit
+fi
+
+BALANCE_TRAINCHAIN=`./trainchain/src/trainchain-cli --regtest getbalance`
+BC=`echo "$BALANCE_TRAINCHAIN>=1000" | bc`
+if [ $BC -eq 1 ]; then
+    echo
+    echo "Sidechain balance updated, deposit processed!"
+    echo "trainchain balance: $BALANCE_TRAINCHAIN"
+else
+    echo
+    echo "ERROR trainchain deposit did not complete!"
+    exit
+fi
+
+
+
+
+#
+# Now withdraw from all sidechains at the same time
+#
+
+# Get a mainchain address and testchain refund address
+MAINCHAIN_ADDRESS=`./mainchain/src/drivechain-cli --regtest getnewaddress mainchain legacy`
+TESTCHAIN_REFUND_ADDRESS=`./testchain/src/testchain-cli --regtest getnewaddress refund legacy`
+TRAINCHAIN_REFUND_ADDRESS=`./trainchain/src/trainchain-cli --regtest getnewaddress refund legacy`
+THUNDER_REFUND_ADDRESS=`./thunder/src/thunder-cli --regtest getnewaddress refund legacy`
+
+# Create a withdrawal on all three sidechains
+echo
+echo "We will now create a withdrawal on testchain, trainchain and thunder"
+./testchain/src/testchain-cli --regtest createwithdrawal $MAINCHAIN_ADDRESS $TESTCHAIN_REFUND_ADDRESS 111 0.1 0.1
+./trainchain/src/trainchain-cli --regtest createwithdrawal $MAINCHAIN_ADDRESS $TRAINCHAIN_REFUND_ADDRESS 112 0.1 0.1
+./thunder/src/thunder-cli --regtest createwithdrawal $MAINCHAIN_ADDRESS $THUNDER_REFUND_ADDRESS 113 0.1 0.1
+sleep 3s
+
+# BMM mine all sidechains to create withdrawal bundles
+echo
+echo "Now we will BMM mine to create withdrawal bundles"
+for ((i = 0; i < 6; i++)); do
+    echo
+    echo "BMM mining to create withdrawal bundles!"
+    bmm testchain trainchain thunder
+done
+
+# Check if bundles were created
+
+HASHBUNDLE=`./mainchain/src/drivechain-cli --regtest listwithdrawalstatus 0`
+HASHBUNDLE=`echo $HASHBUNDLE | python -c 'import json, sys; obj=json.load(sys.stdin); print obj[0]["hash"]'`
+if [ -z "$HASHBUNDLE" ]; then
+    echo "Error: No testchain withdrawal bundle found"
+    exit
+else
+    echo "Good: testchain bundle found: $HASHBUNDLE"
+fi
+
+./mainchain/src/drivechain-cli --regtest setwithdrawalvote upvote 0 $HASHBUNDLE
+
+HASHBUNDLE=`./mainchain/src/drivechain-cli --regtest listwithdrawalstatus 2`
+HASHBUNDLE=`echo $HASHBUNDLE | python -c 'import json, sys; obj=json.load(sys.stdin); print obj[0]["hash"]'`
+if [ -z "$HASHBUNDLE" ]; then
+    echo "Error: No thunder withdrawal bundle found"
+    exit
+else
+    echo "Good: thunder bundle found: $HASHBUNDLE"
+fi
+
+./mainchain/src/drivechain-cli --regtest setwithdrawalvote upvote 2 $HASHBUNDLE
+
+HASHBUNDLE=`./mainchain/src/drivechain-cli --regtest listwithdrawalstatus 3`
+HASHBUNDLE=`echo $HASHBUNDLE | python -c 'import json, sys; obj=json.load(sys.stdin); print obj[0]["hash"]'`
+if [ -z "$HASHBUNDLE" ]; then
+    echo "Error: No trainchain withdrawal bundle found"
+    exit
+else
+    echo "Good: trainchain bundle found: $HASHBUNDLE"
+fi
+
+./mainchain/src/drivechain-cli --regtest setwithdrawalvote upvote 3 $HASHBUNDLE
+
+# Mine enough blocks for the withdrawal bundles to pay out
+echo "Will now mine $MIN_WORK_SCORE blocks"
+minemainchain $MIN_WORK_SCORE
+
+sleep 2s
+
+# Check if payouts were received
+WITHDRAW_BALANCE=`./mainchain/src/drivechain-cli --regtest getbalance mainchain`
+BC=`echo "$WITHDRAW_BALANCE>=336" | bc`
+if [ $BC -eq 1 ]; then
+    echo
+    echo
+    echo -e "\e[32m==========================\e[0m"
+    echo
+    echo -e "\e[1mpayouts received!\e[0m"
+    echo "amount: $WITHDRAW_BALANCE"
+    echo
+    echo -e "\e[32m==========================\e[0m"
+else
+    echo
+    echo -e "\e[31mError: payouts not received!\e[0m"
+    exit
+fi
+
+sleep 2s
+
+
+#
+# Test BMM mining more blocks
+#
+echo
+echo "Now we will BMM mine 100 more blocks"
+for ((i = 0; i < 100; i++)); do
+    echo
+    echo "BMM mining $i / 100"
+    bmm testchain trainchain thunder
+done
+
+
+
+
 echo
 echo
 echo -e "\e[32mdrivechain integration testing completed!\e[0m"
@@ -940,12 +1147,15 @@ echo -e "\e[32mIf you made it here that means everything probably worked!\e[0m"
 echo "If you notice any issues but the script still made it to the end, please"
 echo "open an issue on GitHub!"
 
+sleep 5s
+
 if [ $SKIP_SHUTDOWN -ne 1 ]; then
     # Stop the binaries
     echo
-    echo
     echo "Will now shut down!"
     ./mainchain/src/drivechain-cli --regtest stop
-    ./sidechains/src/testchain-cli --regtest stop
+    ./testchain/src/testchain-cli --regtest stop
+    ./trainchain/src/trainchain-cli --regtest stop
+    ./thunder/src/thunder-cli --regtest stop
 fi
 

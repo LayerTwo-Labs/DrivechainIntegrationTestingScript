@@ -808,15 +808,11 @@ sleep 3s
 # mainchain. We will mine up to 10 blocks before giving up.
 echo
 echo "Now we will mine enough BMM blocks for the sidechain to create a bundle"
-for ((i = 0; i < 10; i++)); do
+for ((i = 0; i < 3; i++)); do
+    echo
+    echo "Mining BMM to process withdrawal!"
+    sleep 0.5s
     bmm testchain
-
-    # Check for bundle
-    BUNDLECHECK=`./mainchain/src/drivechain-cli --regtest listwithdrawalstatus 0`
-    if [ "-$BUNDLECHECK-" != "--" ]; then
-        echo "Bundle has been found!"
-        break
-    fi
 done
 
 # Check if bundle was created

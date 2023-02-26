@@ -1,3 +1,12 @@
+# Moved to LayerTwo-Labs
+The current version of the software can be found here: https://github.com/LayerTwo-Labs
+
+
+
+
+
+
+
 # DriveChainIntegration
 
 This script will go through the process of cloning, building and running through a basic test of Drivechain sidechain functionality. The mainchain & Testchain sidechain template will be started. Then the sidechain will be activated, have BMM blocks mined, deposits made and finally a withdrawal created and verified. 

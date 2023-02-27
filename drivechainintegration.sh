@@ -2,10 +2,10 @@
 
 # Drivechain integration testing
 
-# This script will download and build the mainchain, testchain, trainchain and
+# This script will download and build the mainchain, testchain, BitAssets and
 # thunder sidechains and then run a series of tests.
 
-VERSION=2
+VERSION=3
 
 REINDEX=0
 BMM_BID=0.0001
@@ -113,8 +113,8 @@ function starttestchain {
     sleep 15s
 }
 
-function starttrainchain {
-    ./trainchain/src/qt/trainchain-qt \
+function startbitassets {
+    ./BitAssets/src/qt/bitassets-qt \
     --regtest \
     --verifybmmacceptheader \
     --verifybmmacceptblock \
@@ -127,7 +127,7 @@ function starttrainchain {
 }
 
 function startthunder {
-    ./thunder/src/qt/thunder-qt \
+    ./Thunder/src/qt/thunder-qt \
     --regtest \
     --verifybmmacceptheader \
     --verifybmmacceptblock \
@@ -255,10 +255,10 @@ function bmm {
     sleep 0.5s
 
     OLD_TESTCHAIN=0
-    OLD_TRAINCHAIN=0
+    OLD_BITASSETS=0
     OLD_THUNDER=0
     NEW_TESTCHAIN=0
-    NEW_TRAINCHAIN=0
+    NEW_BITASSETS=0
     NEW_THUNDER=0
 
     # Call refreshbmm RPC on any sidechains we want to BMM
@@ -268,12 +268,12 @@ function bmm {
         if [ "$arg" == "testchain" ]; then
             OLD_TESTCHAIN=`./testchain/src/testchain-cli --regtest getblockcount`
             ./testchain/src/testchain-cli --regtest refreshbmm $BMM_BID
-        elif [ "$arg" == "trainchain" ]; then
-            OLD_TRAINCHAIN=`./trainchain/src/trainchain-cli --regtest getblockcount`
-            ./trainchain/src/trainchain-cli --regtest refreshbmm $BMM_BID
+        elif [ "$arg" == "bitassets" ]; then
+            OLD_BITASSETS=`./BitAssets/src/bitassets-cli --regtest getblockcount`
+            ./BitAssets/src/bitassets-cli --regtest refreshbmm $BMM_BID
         elif [ "$arg" == "thunder" ]; then
-            OLD_THUNDER=`./thunder/src/thunder-cli --regtest getblockcount`
-            ./thunder/src/thunder-cli --regtest refreshbmm $BMM_BID
+            OLD_THUNDER=`./Thunder/src/thunder-cli --regtest getblockcount`
+            ./Thunder/src/thunder-cli --regtest refreshbmm $BMM_BID
 
         sleep 1s
     fi
@@ -292,18 +292,18 @@ function bmm {
             if [ "$arg" == "testchain" ]; then
                 ./testchain/src/testchain-cli --regtest refreshbmm $BMM_BID false
                 NEW_TESTCHAIN=`./testchain/src/testchain-cli --regtest getblockcount`
-            elif [ "$arg" == "trainchain" ]; then
-                ./trainchain/src/trainchain-cli --regtest refreshbmm $BMM_BID false
-                NEW_TRAINCHAIN=`./trainchain/src/trainchain-cli --regtest getblockcount`
+            elif [ "$arg" == "bitassets" ]; then
+                ./BitAssets/src/bitassets-cli --regtest refreshbmm $BMM_BID false
+                NEW_BITASSETS=`./BitAssets/src/bitassets-cli --regtest getblockcount`
             elif [ "$arg" == "thunder" ]; then
-                ./thunder/src/thunder-cli --regtest refreshbmm $BMM_BID false
-                NEW_THUNDER=`./thunder/src/thunder-cli --regtest getblockcount`
+                ./Thunder/src/thunder-cli --regtest refreshbmm $BMM_BID false
+                NEW_THUNDER=`./Thunder/src/thunder-cli --regtest getblockcount`
         fi
         done
 
         # Check completion
         if [ "$OLD_TESTCHAIN" -ne "$NEW_TESTCHAIN" ] && \
-            [ "$OLD_TRAINCHAIN" -ne "$NEW_TRAINCHAIN" ] && \
+            [ "$OLD_BITASSETS" -ne "$NEW_BITASSETS" ] && \
             [ "$OLD_THUNDER" -ne "$NEW_THUNDER" ]; then
             break
         fi
@@ -356,27 +356,21 @@ function buildchain {
 #
 rm -rf ~/.drivechain
 rm -rf ~/.testchain
-rm -rf ~/.trainchain
+rm -rf ~/.bitassets
 rm -rf ~/.thunder
 
 
 
 #
-# Clone repositories & copy sidechains
+# Clone repositories
 #
 if [ $SKIP_CLONE -ne 1 ]; then
     echo
     echo "Cloning repositories"
-    git clone https://github.com/drivechain-project/mainchain
-    git clone https://github.com/drivechain-project/sidechains testchain
-
-    if [ ! -d thunder/ ]; then
-        cp -rf testchain thunder
-    fi
-
-    if [ ! -d trainchain/ ]; then
-        cp -rf testchain trainchain
-    fi
+    git clone https://github.com/LayerTwo-labs/mainchain
+    git clone https://github.com/LayerTwo-labs/testchain
+    git clone https://github.com/LayerTwo-labs/Thunder
+    git clone https://github.com/LayerTwo-labs/BitAssets
 fi
 
 
@@ -390,22 +384,18 @@ if [ $SKIP_BUILD -ne 1 ]; then
     echo "Building repositories"
 
     cd mainchain
-    git checkout master
     buildchain
     cd ..
 
     cd testchain
-    git checkout testchain
     buildchain
     cd ..
 
-    cd trainchain
-    git checkout trainchain
+    cd BitAssets
     buildchain
     cd ..
 
-    cd thunder
-    git checkout thunder
+    cd Thunder
     buildchain
     cd ..
 fi
@@ -433,12 +423,12 @@ echo "rpcpassword=integrationtesting" >> ~/.testchain/testchain.conf
 echo "server=1" >> ~/.testchain/testchain.conf
 
 echo
-echo "Creating trainchain configuration file"
-mkdir ~/.trainchain/
-touch ~/.trainchain/trainchain.conf
-echo "rpcuser=drivechain" > ~/.trainchain/trainchain.conf
-echo "rpcpassword=integrationtesting" >> ~/.trainchain/trainchain.conf
-echo "server=1" >> ~/.trainchain/trainchain.conf
+echo "Creating BitAssets configuration file"
+mkdir ~/.bitassets/
+touch ~/.bitassets/bitassets.conf
+echo "rpcuser=drivechain" > ~/.bitassets/bitassets.conf
+echo "rpcpassword=integrationtesting" >> ~/.bitassets/bitassets.conf
+echo "server=1" >> ~/.bitassets/bitassets.conf
 
 echo
 echo "Creating thunder configuration file"
@@ -671,7 +661,7 @@ COUNT_TESTCHAIN=`./testchain/src/testchain-cli --regtest getblockcount`
 if [ "$COUNT_TESTCHAIN" -eq 1 ]; then
     echo "Sidechain connected BMM block!"
 else
-    echo "ERROR sidechain has no BMM block connected!"
+    echo "ERROR testchain has no BMM block connected!"
     exit
 fi
 
@@ -896,12 +886,12 @@ minemainchain 100
 
 
 #
-# Propose the trainchain and thunder sidechains
+# Propose the BitAssets and Thunder sidechains
 #
 
 ./mainchain/src/drivechain-cli --regtest createsidechainproposal 2 "thunder" "and lightning"
 minemainchain 1
-./mainchain/src/drivechain-cli --regtest createsidechainproposal 3 "trainchain" "all aboard"
+./mainchain/src/drivechain-cli --regtest createsidechainproposal 4 "bitassets" "digital assets"
 minemainchain 1
 
 # Mine enough blocks to activate the sidechains
@@ -921,13 +911,13 @@ else
     exit
 fi
 
-COUNTTRAINCHAIN=`echo $LISTACTIVESIDECHAINS | grep -c "\"title\": \"trainchain\""`
-if [ "$COUNTTRAINCHAIN" -eq 1 ]; then
+COUNTBITASSETS=`echo $LISTACTIVESIDECHAINS | grep -c "\"title\": \"bitassets\""`
+if [ "$COUNTBITASSETS" -eq 1 ]; then
     echo
-    echo "Trainchain has activated!"
+    echo "BitAssets has activated!"
 else
     echo
-    echo "ERROR Trainchain failed to activate!"
+    echo "ERROR BitAssets failed to activate!"
     exit
 fi
 
@@ -944,12 +934,12 @@ restartdrivechain
 
 
 #
-# Start Trainchain & Thunder and then test BMM mining them
+# Start BitAssets & Thunder and then test BMM mining them
 #
 
 echo
-echo "Starting Trainchain and Thunder sidechains"
-starttrainchain
+echo "Starting BitAssets and Thunder sidechains"
+startbitassets
 startthunder
 
 # BMM mine the three active sidechains
@@ -958,7 +948,7 @@ echo "Now we will BMM mine all three active sidechains"
 for ((i = 0; i < 10; i++)); do
     echo
     echo "BMM mining all three active sidechains!"
-    bmm testchain trainchain thunder
+    bmm testchain bitassets thunder
 done
 
 
@@ -972,13 +962,13 @@ TESTCHAIN_ADDRESS=`./testchain/src/testchain-cli --regtest getnewaddress sidecha
 TESTCHAIN_DEPOSIT_ADDRESS=`./testchain/src/testchain-cli --regtest formatdepositaddress $TESTCHAIN_ADDRESS`
 ./mainchain/src/drivechain-cli --regtest createsidechaindeposit 0 $TESTCHAIN_DEPOSIT_ADDRESS 1000 0.01
 
-THUNDER_ADDRESS=`./thunder/src/thunder-cli --regtest getnewaddress sidechain legacy`
-THUNDER_DEPOSIT_ADDRESS=`./thunder/src/thunder-cli --regtest formatdepositaddress $THUNDER_ADDRESS`
+THUNDER_ADDRESS=`./Thunder/src/thunder-cli --regtest getnewaddress sidechain legacy`
+THUNDER_DEPOSIT_ADDRESS=`./Thunder/src/thunder-cli --regtest formatdepositaddress $THUNDER_ADDRESS`
 ./mainchain/src/drivechain-cli --regtest createsidechaindeposit 2 $THUNDER_DEPOSIT_ADDRESS 1000 0.01
 
-TRAINCHAIN_ADDRESS=`./trainchain/src/trainchain-cli --regtest getnewaddress sidechain legacy`
-TRAINCHAIN_DEPOSIT_ADDRESS=`./trainchain/src/trainchain-cli --regtest formatdepositaddress $TRAINCHAIN_ADDRESS`
-./mainchain/src/drivechain-cli --regtest createsidechaindeposit 3 $TRAINCHAIN_DEPOSIT_ADDRESS 1000 0.01
+BITASSETS_ADDRESS=`./BitAssets/src/bitassets-cli --regtest getnewaddress sidechain legacy`
+BITASSETS_DEPOSIT_ADDRESS=`./BitAssets/src/bitassets-cli --regtest formatdepositaddress $BITASSETS_ADDRESS`
+./mainchain/src/drivechain-cli --regtest createsidechaindeposit 4 $BITASSETS_DEPOSIT_ADDRESS 1000 0.01
 
 # Process deposits
 echo
@@ -986,7 +976,7 @@ echo "Now we will BMM mine to process deposits"
 for ((i = 0; i < 6; i++)); do
     echo
     echo "BMM mining to process deposits!"
-    bmm testchain trainchain thunder
+    bmm testchain bitassets thunder
 done
 
 # Check that the deposits have been added to our sidechain balance
@@ -1003,7 +993,7 @@ else
     exit
 fi
 
-BALANCE_THUNDER=`./thunder/src/thunder-cli --regtest getbalance`
+BALANCE_THUNDER=`./Thunder/src/thunder-cli --regtest getbalance`
 BC=`echo "$BALANCE_THUNDER>=1000" | bc`
 if [ $BC -eq 1 ]; then
     echo
@@ -1015,15 +1005,15 @@ else
     exit
 fi
 
-BALANCE_TRAINCHAIN=`./trainchain/src/trainchain-cli --regtest getbalance`
-BC=`echo "$BALANCE_TRAINCHAIN>=1000" | bc`
+BALANCE_BITASSETS=`./BitAssets/src/bitassets-cli --regtest getbalance`
+BC=`echo "$BALANCE_BITASSETS>=1000" | bc`
 if [ $BC -eq 1 ]; then
     echo
     echo "Sidechain balance updated, deposit processed!"
-    echo "trainchain balance: $BALANCE_TRAINCHAIN"
+    echo "bitassets balance: $BALANCE_BITASSETS"
 else
     echo
-    echo "ERROR trainchain deposit did not complete!"
+    echo "ERROR bitassets deposit did not complete!"
     exit
 fi
 
@@ -1037,15 +1027,15 @@ fi
 # Get a mainchain address and testchain refund address
 MAINCHAIN_ADDRESS=`./mainchain/src/drivechain-cli --regtest getnewaddress mainchain legacy`
 TESTCHAIN_REFUND_ADDRESS=`./testchain/src/testchain-cli --regtest getnewaddress refund legacy`
-TRAINCHAIN_REFUND_ADDRESS=`./trainchain/src/trainchain-cli --regtest getnewaddress refund legacy`
-THUNDER_REFUND_ADDRESS=`./thunder/src/thunder-cli --regtest getnewaddress refund legacy`
+BITASSETS_REFUND_ADDRESS=`./BitAssets/src/bitassets-cli --regtest getnewaddress refund legacy`
+THUNDER_REFUND_ADDRESS=`./Thunder/src/thunder-cli --regtest getnewaddress refund legacy`
 
 # Create a withdrawal on all three sidechains
 echo
-echo "We will now create a withdrawal on testchain, trainchain and thunder"
+echo "We will now create a withdrawal on testchain, bitassets and thunder"
 ./testchain/src/testchain-cli --regtest createwithdrawal $MAINCHAIN_ADDRESS $TESTCHAIN_REFUND_ADDRESS 111 0.1 0.1
-./trainchain/src/trainchain-cli --regtest createwithdrawal $MAINCHAIN_ADDRESS $TRAINCHAIN_REFUND_ADDRESS 112 0.1 0.1
-./thunder/src/thunder-cli --regtest createwithdrawal $MAINCHAIN_ADDRESS $THUNDER_REFUND_ADDRESS 113 0.1 0.1
+./BitAssets/src/bitassets-cli --regtest createwithdrawal $MAINCHAIN_ADDRESS $BITASSETS_REFUND_ADDRESS 112 0.1 0.1
+./Thunder/src/thunder-cli --regtest createwithdrawal $MAINCHAIN_ADDRESS $THUNDER_REFUND_ADDRESS 113 0.1 0.1
 sleep 3s
 
 # BMM mine all sidechains to create withdrawal bundles
@@ -1054,7 +1044,7 @@ echo "Now we will BMM mine to create withdrawal bundles"
 for ((i = 0; i < 6; i++)); do
     echo
     echo "BMM mining to create withdrawal bundles!"
-    bmm testchain trainchain thunder
+    bmm testchain bitassets thunder
 done
 
 # Check if bundles were created
@@ -1081,16 +1071,16 @@ fi
 
 ./mainchain/src/drivechain-cli --regtest setwithdrawalvote upvote 2 $HASHBUNDLE
 
-HASHBUNDLE=`./mainchain/src/drivechain-cli --regtest listwithdrawalstatus 3`
+HASHBUNDLE=`./mainchain/src/drivechain-cli --regtest listwithdrawalstatus 4`
 HASHBUNDLE=`echo $HASHBUNDLE | python -c 'import json, sys; obj=json.load(sys.stdin); print obj[0]["hash"]'`
 if [ -z "$HASHBUNDLE" ]; then
-    echo "Error: No trainchain withdrawal bundle found"
+    echo "Error: No bitassets withdrawal bundle found"
     exit
 else
-    echo "Good: trainchain bundle found: $HASHBUNDLE"
+    echo "Good: bitassets bundle found: $HASHBUNDLE"
 fi
 
-./mainchain/src/drivechain-cli --regtest setwithdrawalvote upvote 3 $HASHBUNDLE
+./mainchain/src/drivechain-cli --regtest setwithdrawalvote upvote 4 $HASHBUNDLE
 
 # Mine enough blocks for the withdrawal bundles to pay out
 echo "Will now mine $MIN_WORK_SCORE blocks"
@@ -1127,7 +1117,7 @@ echo "Now we will BMM mine 100 more blocks"
 for ((i = 0; i < 100; i++)); do
     echo
     echo "BMM mining $i / 100"
-    bmm testchain trainchain thunder
+    bmm testchain bitassets thunder
 done
 
 
@@ -1151,7 +1141,7 @@ if [ $SKIP_SHUTDOWN -ne 1 ]; then
     echo "Will now shut down!"
     ./mainchain/src/drivechain-cli --regtest stop
     ./testchain/src/testchain-cli --regtest stop
-    ./trainchain/src/trainchain-cli --regtest stop
-    ./thunder/src/thunder-cli --regtest stop
+    ./BitAssets/src/bitassets-cli --regtest stop
+    ./Thunder/src/thunder-cli --regtest stop
 fi
 

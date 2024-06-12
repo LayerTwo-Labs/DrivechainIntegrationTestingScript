@@ -147,15 +147,16 @@ function restartdrivechain {
     #
     # Shutdown drivechain mainchain, restart it, and make sure nothing broke.
     # Exits the script if anything did break.
-    #
-    # TODO check return value of python json parsing and exit if it failed
-    # TODO use jq instead of python
+
     echo
     echo "We will now restart drivechain & verify its state after restarting!"
 
     # Record the state before restart
-    HASHSCDB=`./mainchain/src/drivechain-cli --regtest gettotalscdbhash`
-    HASHSCDB=`echo $HASHSCDB | python -c 'import json, sys; obj=json.load(sys.stdin); print obj["hashscdbtotal"]'`
+    HASHSCDB=`./mainchain/src/drivechain-cli --regtest gettotalscdbhash | jq -r '.hashscdbtotal'`
+    if [ -z "$HASHSCDB" ]; then
+        echo "Failed to parse hashscdbtotal"
+        exit 1
+    fi
 
     # Count doesn't return a json array like the above commands - so no parsing
     COUNT=`./mainchain/src/drivechain-cli --regtest getblockcount`

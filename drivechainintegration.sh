@@ -313,7 +313,11 @@ function bmm {
 
 function buildchain {
     git pull
-    ./autogen.sh
+    libtoolize --copy --force 
+    aclocal 
+    autoheader 
+    autoconf
+    automake --add-missing --copy 
 
     if [ $INCOMPATIBLE_BDB -ne 1 ]; then
         ./configure
